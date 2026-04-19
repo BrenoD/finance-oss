@@ -14,11 +14,7 @@ const DB_READY = SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_KEY !== "YOUR_
 // ─────────────────────────────────────────────────────────────────────────────
 const auth = {
   // Sign in with OAuth provider (Google, GitHub) — redirects to provider
-  async signInWithProvider(provider) {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`, {
-      headers: { apikey: SUPABASE_KEY },
-    });
-    // Supabase returns a redirect — follow it
+  signInWithProvider(provider) {
     window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`;
   },
 
@@ -1391,6 +1387,8 @@ function FinanceApp({ user, onSignOut }) {
   };
 
   const histSub    = subs.find(s=>s.id===histId);
+  const myName     = user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Me";
+  const herName    = couple?.partner_name||partnerName||"Partner";
   const totalSubs  = subs.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totalExp   = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totalOut   = totalSubs+totalExp;
