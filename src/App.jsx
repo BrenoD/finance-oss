@@ -14,7 +14,11 @@ const DB_READY = SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_KEY !== "YOUR_
 // ─────────────────────────────────────────────────────────────────────────────
 const auth = {
   // Sign in with OAuth provider (Google, GitHub) — redirects to provider
-  signInWithProvider(provider) {
+  async signInWithProvider(provider) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`, {
+      headers: { apikey: SUPABASE_KEY },
+    });
+    // Supabase returns a redirect — follow it
     window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`;
   },
 
@@ -116,6 +120,73 @@ const sb = {
 const LS = {
   get: (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } },
   set: (k, v)   => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COUPLE API
+//  Run in Supabase SQL Editor:
+//  create table if not exists couples (
+//    id bigint generated always as identity primary key,
+//    owner_id uuid not null, partner_id uuid,
+//    invite_code text unique not null, partner_name text,
+//    created_at timestamptz default now()
+//  );
+//  alter table couples disable row level security;
+//  create table if not exists activity_feed (
+//    id bigint generated always as identity primary key,
+//    couple_id bigint references couples(id) on delete cascade,
+//    user_id uuid not null, user_name text,
+//    type text not null, label text not null,
+//    amount numeric, created_at timestamptz default now()
+//  );
+//  alter table activity_feed disable row level security;
+// ─────────────────────────────────────────────────────────────────────────────
+const coupleApi = {
+  makeCode: () => Math.random().toString(36).slice(2,10).toUpperCase(),
+  async getOrCreate(userId) {
+    if (!DB_READY) return null;
+    try {
+      const asOwner = await sb.select("couples",`owner_id=eq.${userId}`);
+      if (asOwner.length>0) return asOwner[0];
+      const asPartner = await sb.select("couples",`partner_id=eq.${userId}`);
+      if (asPartner.length>0) return asPartner[0];
+      const [row] = await sb.insert("couples",{owner_id:userId,invite_code:coupleApi.makeCode()});
+      return row;
+    } catch(e){console.error(e);return null;}
+  },
+  async joinByCode(code,userId,userName) {
+    if (!DB_READY) return {error:"DB not configured"};
+    try {
+      const rows = await sb.select("couples",`invite_code=eq.${code}`);
+      if (rows.length===0) return {error:"Invalid invite code"};
+      const couple=rows[0];
+      if (couple.owner_id===userId) return {already:true,couple};
+      if (couple.partner_id) return {already:true,couple};
+      await sb.update("couples",couple.id,{partner_id:userId,partner_name:userName});
+      return {success:true,couple:{...couple,partner_id:userId,partner_name:userName}};
+    } catch(e){return {error:e.message};}
+  },
+  async getCouple(userId) {
+    if (!DB_READY) return null;
+    try {
+      const asOwner=await sb.select("couples",`owner_id=eq.${userId}`);
+      if (asOwner.length>0) return {...asOwner[0],role:"owner"};
+      const asPartner=await sb.select("couples",`partner_id=eq.${userId}`);
+      if (asPartner.length>0) return {...asPartner[0],role:"partner"};
+      return null;
+    } catch(e){return null;}
+  },
+  async log(coupleId,userId,userName,type,label,amount) {
+    if (!DB_READY||!coupleId) return;
+    try { await sb.insert("activity_feed",{couple_id:coupleId,user_id:userId,user_name:userName,type,label,amount:amount||null}); }
+    catch(e){console.error(e);}
+  },
+  async getFeed(coupleId) {
+    if (!DB_READY||!coupleId) return [];
+    try { return await sb.select("activity_feed",`couple_id=eq.${coupleId}&order=created_at.desc&limit=100`); }
+    catch(e){return [];}
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,14 +311,9 @@ function LoginScreen({ onLogin }) {
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes scanline{0%{top:-2px}100%{top:100vh}}
         @keyframes pulse2{0%,100%{opacity:.4}50%{opacity:1}}
-        *{box-sizing:border-box;margin:0;padding:0}
-        html,body,#root{width:100%;height:100%;margin:0;padding:0;background:#070707}
-        body{overflow-x:hidden}
-        input{outline:none;font-family:inherit}
+        * { box-sizing:border-box }
+        input { outline:none; font-family:inherit }
         input::placeholder{color:rgba(255,255,255,.2)}
-        ::-webkit-scrollbar{width:0px;height:0px;background:transparent}
-        ::-webkit-scrollbar-thumb{background:transparent}
-        scrollbar-width:none;
       `}</style>
 
       {/* bg grid */}
@@ -397,6 +463,150 @@ function LoginScreen({ onLogin }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  INVITE MODAL
+// ─────────────────────────────────────────────────────────────────────────────
+function InviteModal({onClose,couple}) {
+  const [copied,setCopied]=useState(false);
+  const link=couple?`${APP_URL}?invite=${couple.invite_code}`:"Loading...";
+  const hasPartner=!!couple?.partner_id;
+  const copy=()=>{ navigator.clipboard.writeText(link).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:800,
+      display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(14px)",padding:"1rem"}}>
+      <div style={{background:"#090909",border:"1px solid rgba(255,255,255,0.09)",borderRadius:"16px",
+        padding:"1.75rem",maxWidth:420,width:"100%",animation:"popIn .22s ease both",position:"relative"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:1.5,
+          background:"linear-gradient(90deg,transparent,rgba(255,105,180,0.6),transparent)",borderRadius:"16px 16px 0 0"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.25rem"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"0.625rem"}}>
+            <span style={{fontSize:"1.4rem"}}>♥</span>
+            <div>
+              <div style={{fontWeight:600,fontSize:"0.9rem"}}>Invite Partner</div>
+              <div style={{color:"rgba(255,255,255,0.25)",fontSize:"0.65rem",letterSpacing:"0.1em"}}>
+                {hasPartner?"PARTNER CONNECTED":"SHARE THIS LINK"}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:18,padding:0}}>x</button>
+        </div>
+        {hasPartner?(
+          <div style={{textAlign:"center",padding:"1rem 0"}}>
+            <div style={{fontSize:"2rem",marginBottom:"0.75rem"}}>♥</div>
+            <div style={{fontWeight:600,fontSize:"0.9rem",marginBottom:"0.375rem"}}>Already connected!</div>
+            <div style={{color:"rgba(255,255,255,0.35)",fontSize:"0.78rem"}}>Your partner has joined. Check the Together tab.</div>
+          </div>
+        ):(
+          <>
+            <div style={{color:"rgba(255,255,255,0.4)",fontSize:"0.78rem",lineHeight:1.6,marginBottom:"1.1rem"}}>
+              Send this link to your partner. When they open it and sign in, you will be connected and see each other's activity in the <strong style={{color:"#FF69B4"}}>Together</strong> tab.
+            </div>
+            <div style={{display:"flex",gap:"0.45rem",marginBottom:"1rem"}}>
+              <div style={{flex:1,background:"#111",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"8px",
+                padding:"0.7rem 0.875rem",fontFamily:"'DM Mono',monospace",fontSize:"0.72rem",
+                color:"rgba(255,255,255,0.5)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{link}</div>
+              <button onClick={copy} style={{padding:"0.7rem 1rem",background:copied?"#2ED573":"#FF69B4",
+                border:"none",borderRadius:"8px",color:"#fff",cursor:"pointer",fontWeight:700,
+                fontSize:"0.72rem",letterSpacing:"0.08em",transition:"background .2s",flexShrink:0,whiteSpace:"nowrap"}}>
+                {copied?"COPIED":"COPY"}
+              </button>
+            </div>
+            <div style={{background:"rgba(255,105,180,0.05)",border:"1px solid rgba(255,105,180,0.12)",
+              borderRadius:"8px",padding:"0.75rem 0.875rem",display:"flex",alignItems:"center",gap:"0.5rem"}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:"#FFA502",flexShrink:0}}/>
+              <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.68rem",letterSpacing:"0.06em"}}>Waiting for partner to join...</div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TOGETHER TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function TogetherTab({couple,user}) {
+  const [feed,setFeed]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const myName=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Me";
+  const herName=couple?.partner_name||"Partner";
+  const hasPartner=!!couple?.partner_id;
+  useEffect(()=>{
+    if(!couple){setLoading(false);return;}
+    coupleApi.getFeed(couple.id).then(f=>{setFeed(f);setLoading(false);});
+    const iv=setInterval(()=>coupleApi.getFeed(couple.id).then(f=>setFeed(f)),20000);
+    return ()=>clearInterval(iv);
+  },[couple]);
+  const typeColor=(t)=>({subscription:"#A29BFE",expense:"#FF4757",weekly:"#FFA502",payment:"#2ED573",income:"#E8FF47"}[t]||"#fff");
+  const typeLabel=(t,label,amount)=>({
+    payment:`paid ${label}`,
+    income:`updated income`,
+    subscription:`added: ${label}`,
+    expense:`added expense: ${label}`,
+    weekly:`logged: ${label}`,
+  }[t]||label);
+  const fmtDate=(iso)=>{const d=new Date(iso);return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})+" · "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});};
+  if(!hasPartner) return (
+    <div style={{animation:"fadeUp .32s ease both",textAlign:"center",padding:"4rem 0"}}>
+      <div style={{fontSize:"3rem",marginBottom:"1rem"}}>♥</div>
+      <div style={{fontWeight:600,fontSize:"0.95rem",marginBottom:"0.5rem"}}>No partner yet</div>
+      <div style={{color:"rgba(255,255,255,0.35)",fontSize:"0.78rem",lineHeight:1.6}}>Use the ♥ Invite button to connect with your partner.</div>
+    </div>
+  );
+  return (
+    <div style={{animation:"fadeUp .32s ease both"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"1rem",marginBottom:"1.25rem",
+        padding:"0.875rem",background:"rgba(255,105,180,0.04)",border:"1px solid rgba(255,105,180,0.12)",borderRadius:"12px"}}>
+        {[{name:myName,bg:"linear-gradient(135deg,#E8FF47,#A8C000)",c:"#080808"},{name:herName,bg:"linear-gradient(135deg,#FF69B4,#FF4757)",c:"#fff"}].map((p,i)=>(
+          <div key={i} style={{textAlign:"center"}}>
+            <div style={{width:38,height:38,borderRadius:"50%",background:p.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.9rem",fontWeight:700,color:p.c,margin:"0 auto 0.25rem"}}>{p.name[0].toUpperCase()}</div>
+            <div style={{color:"rgba(255,255,255,0.4)",fontSize:"0.62rem",letterSpacing:"0.1em"}}>{p.name.split(" ")[0].toUpperCase()}</div>
+          </div>
+        ))}
+        <div style={{fontSize:"1.25rem",color:"#FF69B4"}}>♥</div>
+      </div>
+      {loading?(
+        <div style={{textAlign:"center",padding:"2rem 0"}}>
+          <div style={{width:28,height:28,border:"2px solid rgba(232,255,71,0.1)",borderTop:"2px solid #E8FF47",borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/>
+        </div>
+      ):feed.length===0?(
+        <div style={{textAlign:"center",padding:"3rem 0",color:"rgba(255,255,255,0.15)",fontSize:"0.72rem",letterSpacing:"0.15em"}}>NO ACTIVITY YET</div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
+          {feed.map((item,i)=>{
+            const isMe=item.user_id===user?.id;
+            const name=item.user_name||(isMe?myName:herName);
+            return (
+              <div key={item.id} style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",borderRadius:"11px",
+                padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.875rem",
+                animation:`fadeUp .28s ease ${i*.03}s both`,position:"relative",overflow:"hidden"}}>
+                <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,borderRadius:"0 2px 2px 0",background:isMe?"#E8FF47":"#FF69B4"}}/>
+                <div style={{width:32,height:32,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:"0.78rem",fontWeight:700,color:isMe?"#080808":"#fff",
+                  background:isMe?"linear-gradient(135deg,#E8FF47,#A8C000)":"linear-gradient(135deg,#FF69B4,#FF4757)"}}>
+                  {name[0].toUpperCase()}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"0.4rem",flexWrap:"wrap"}}>
+                    <span style={{color:isMe?"#E8FF47":"#FF69B4",fontSize:"0.7rem",letterSpacing:"0.08em",fontWeight:600}}>{name.split(" ")[0].toUpperCase()}</span>
+                    <span style={{color:"rgba(255,255,255,0.6)",fontSize:"0.8rem"}}>{typeLabel(item.type,item.label,item.amount)}</span>
+                  </div>
+                  <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>{fmtDate(item.created_at)}</div>
+                </div>
+                {item.amount&&item.type!=="income"&&(
+                  <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.85rem",color:typeColor(item.type),flexShrink:0}}>{fmt(item.amount)}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1010,8 +1220,11 @@ function FinanceApp({ user, onSignOut }) {
   const [expPayDate,setExpPayDate] = useState(null);
   const [editInc,setEditInc]     = useState(false);
   const [tab,setTab]             = useState("subs");
+  const [topTab,setTopTab]       = useState("mine");
   const [paidAnim,setPaidAnim]   = useState({});
   const [savingInc,setSavingInc]           = useState(false);
+  const [couple,setCouple]                 = useState(null);
+  const [showInvite,setShowInvite]         = useState(false);
   const [partnerEnabled,setPartnerEnabled] = useState(()=>LS.get("fm_partnerEnabled",false));
   const [partnerName,setPartnerName]       = useState(()=>LS.get("fm_partnerName","Fiancée"));
   const [partnerIncome,setPartnerIncome]   = useState(()=>LS.get("fm_partnerIncome",0));
@@ -1048,6 +1261,8 @@ function FinanceApp({ user, onSignOut }) {
           if(peName.length>0) setPartnerName(peName[0].value);
           if(peVal.length>0)  setPartnerIncome(parseFloat(peVal[0].value)||0);
           if(peEnabled.length>0) setPartnerEnabled(peEnabled[0].value==="true");
+          const c = await coupleApi.getOrCreate(user.id);
+          setCouple(c);
         } else {
           setSubs(LS.get("fm_subs",[
             {id:1,title:"Netflix",amount:"17.99",ci:0,history:[],logoErr:false},
@@ -1073,6 +1288,8 @@ function FinanceApp({ user, onSignOut }) {
       } else {
         LS.set("fm_income",val);
       }
+      const uname = user?.user_metadata?.full_name||user?.email?.split("@")[0]||"User";
+      coupleApi.log(couple?.id,user?.id,uname,"income",`${GBP}${parseFloat(val).toFixed(2)}`,val);
     } catch(e){console.error(e);}
     setSavingInc(false);
   };
@@ -1103,6 +1320,8 @@ function FinanceApp({ user, onSignOut }) {
           history = [{date:prow.paid_date,time:prow.paid_time}];
         }
         setSubs(p=>[...p,{...row,logoErr:false,history}]);
+        const uname=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"User";
+        coupleApi.log(couple?.id,user?.id,uname,"subscription",newSub.title,parseFloat(newSub.amount));
       } else {
         const row = {...payload,id:Date.now(),history:subPayDate?[{date:subPayDate.date,time:subPayDate.time}]:[],logoErr:false};
         const updated = [...subs,row];
@@ -1120,6 +1339,9 @@ function FinanceApp({ user, onSignOut }) {
         await sb.insert("sub_payments",{sub_id:id,paid_date:d,paid_time:t});
       }
       setSubs(p=>p.map(s=>s.id===id?{...s,history:[{date:d,time:t},...s.history]}:s));
+      const pSub=subs.find(s=>s.id===id);
+      const pname=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"User";
+      coupleApi.log(couple?.id,user?.id,pname,"payment",pSub?.title||"subscription",pSub?.amount);
       if (!DB_READY) LS.set("fm_subs",subs.map(s=>s.id===id?{...s,history:[{date:d,time:t},...s.history]}:s));
     } catch(e){console.error(e);}
     setPaidAnim(p=>({...p,[id]:true}));
@@ -1147,6 +1369,8 @@ function FinanceApp({ user, onSignOut }) {
       if (DB_READY) {
         const [row] = await sb.insert("expenses", payload);
         setExpenses(p=>[...p,row]);
+        const ename=user?.user_metadata?.full_name||user?.email?.split("@")[0]||"User";
+        coupleApi.log(couple?.id,user?.id,ename,"expense",newExp.label,parseFloat(newExp.amount));
       } else {
         const row = {...payload,id:Date.now()};
         const updated = [...expenses,row];
@@ -1199,12 +1423,9 @@ function FinanceApp({ user, onSignOut }) {
         @keyframes paidPop{0%{transform:scale(1)}35%{transform:scale(1.2)}100%{transform:scale(1)}}
         @keyframes scanline{0%{top:-2px}100%{top:100vh}}
         @keyframes blink{0%,100%{opacity:.8}50%{opacity:.2}}
-        *{box-sizing:border-box;margin:0;padding:0}
-        html,body,#root{margin:0;padding:0;background:#070707}
-        body{overflow-x:hidden}
-        ::-webkit-scrollbar{width:0px;height:0px;background:transparent}
-        ::-webkit-scrollbar-thumb{background:transparent}
-        input,button{outline:none;font-family:inherit}
+        ::-webkit-scrollbar{width:3px;height:3px}
+        ::-webkit-scrollbar-thumb{background:rgba(232,255,71,.15);border-radius:2px}
+        *{box-sizing:border-box} input,button{outline:none;font-family:inherit}
         input::placeholder{color:rgba(255,255,255,.18)}
         input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         input[type=date],input[type=time]{color-scheme:dark}
@@ -1252,15 +1473,26 @@ function FinanceApp({ user, onSignOut }) {
               {user?.user_metadata?.full_name || user?.email || "User"}
             </span>
           </div>
-          <button onClick={onSignOut} style={{
-            background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.2)",
-            borderRadius:"8px",color:"rgba(255,71,87,0.7)",
-            padding:"0.35rem 0.65rem",cursor:"pointer",fontSize:"0.65rem",
-            letterSpacing:"0.1em",transition:"all .15s",fontFamily:"'DM Sans',sans-serif",
-          }}
-            onMouseOver={e=>{e.currentTarget.style.background="rgba(255,71,87,0.15)";e.currentTarget.style.color="#FF4757";}}
-            onMouseOut={e=>{e.currentTarget.style.background="rgba(255,71,87,0.08)";e.currentTarget.style.color="rgba(255,71,87,0.7)";}}
-          >SIGN OUT</button>
+          <div style={{display:"flex",gap:"0.4rem"}}>
+            <button onClick={()=>setShowInvite(true)} style={{
+              background:"rgba(255,105,180,0.08)",border:"1px solid rgba(255,105,180,0.25)",
+              borderRadius:"8px",color:"#FF69B4",
+              padding:"0.35rem 0.65rem",cursor:"pointer",fontSize:"0.65rem",
+              letterSpacing:"0.1em",transition:"all .15s",
+            }}
+              onMouseOver={e=>e.currentTarget.style.background="rgba(255,105,180,0.18)"}
+              onMouseOut={e=>e.currentTarget.style.background="rgba(255,105,180,0.08)"}
+            >♥ INVITE</button>
+            <button onClick={onSignOut} style={{
+              background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.2)",
+              borderRadius:"8px",color:"rgba(255,71,87,0.7)",
+              padding:"0.35rem 0.65rem",cursor:"pointer",fontSize:"0.65rem",
+              letterSpacing:"0.1em",transition:"all .15s",
+            }}
+              onMouseOver={e=>{e.currentTarget.style.background="rgba(255,71,87,0.15)";e.currentTarget.style.color="#FF4757";}}
+              onMouseOut={e=>{e.currentTarget.style.background="rgba(255,71,87,0.08)";e.currentTarget.style.color="rgba(255,71,87,0.7)";}}
+            >SIGN OUT</button>
+          </div>
         </div>
 
         {/* ── INCOME ──────────────────────────────────────────────────────── */}
@@ -1432,7 +1664,25 @@ function FinanceApp({ user, onSignOut }) {
           </div>
         </Tilt>
 
-        {/* ── TABS ────────────────────────────────────────────────────────── */}
+        {/* TOP TABS: Meu / Dela / Juntos */}
+        <div style={{display:"flex",gap:3,marginBottom:"0.75rem",
+          background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
+          borderRadius:"10px",padding:3}}>
+          {[
+            {k:"mine",    l:"\u25cf  "+myName.split(" ")[0].toUpperCase()},
+            {k:"hers",    l:"\u25cf  "+herName.split(" ")[0].toUpperCase()},
+            {k:"together",l:"\u2665  JUNTOS"},
+          ].map(t=>(
+            <button key={t.k} onClick={()=>setTopTab(t.k)} style={{
+              flex:1,padding:"0.5rem 0.25rem",border:"none",borderRadius:"7px",cursor:"pointer",
+              fontSize:"0.65rem",fontWeight:600,letterSpacing:"0.08em",transition:"all .15s",
+              background:topTab===t.k?(t.k==="together"?"#FF69B4":"#E8FF47"):"transparent",
+              color:topTab===t.k?"#080808":t.k==="together"?"rgba(255,105,180,0.5)":"rgba(255,255,255,0.28)",
+              whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+            }}>{t.l}</button>
+          ))}
+        </div>
+        {topTab==="mine"&&(
         <div style={{display:"flex",gap:3,marginBottom:"1.1rem",
           background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
           borderRadius:"10px",padding:3}}>
@@ -1445,7 +1695,8 @@ function FinanceApp({ user, onSignOut }) {
               whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
             }}>{t.l}</button>
           ))}
-        </div>
+        </div>)}
+
 
         {/* ── DIRECT DEBITS ───────────────────────────────────────────────── */}
         {tab==="subs"&&(
@@ -1646,6 +1897,26 @@ function FinanceApp({ user, onSignOut }) {
         )}
 
         </>)}
+        {/* end mine */}
+
+        {/* HERS TAB */}
+        {topTab==="hers"&&(
+          <div style={{animation:"fadeUp .32s ease both",textAlign:"center",padding:"3.5rem 0"}}>
+            <div style={{fontSize:"2.5rem",marginBottom:"1rem"}}>♥</div>
+            <div style={{fontWeight:600,fontSize:"0.95rem",marginBottom:"0.5rem",color:"#FF69B4"}}>
+              {herName.split(" ")[0]}'s View
+            </div>
+            <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.78rem",lineHeight:1.7,maxWidth:320,margin:"0 auto"}}>
+              {couple?.partner_id
+                ? `${herName.split(" ")[0]} manages her own finances on her device. Check the Juntos tab to see all shared activity.`
+                : "Invite your partner first. Use the ♥ Invite button above to generate a link."}
+            </div>
+          </div>
+        )}
+
+        {/* TOGETHER TAB */}
+        {topTab==="together"&&<TogetherTab couple={couple} user={user}/>}
+
       </div>
 
       {/* ── MODAL: ADD SUBSCRIPTION ──────────────────────────────────────── */}
@@ -1775,6 +2046,7 @@ function FinanceApp({ user, onSignOut }) {
         </div>
       )}
 
+      {showInvite&&<InviteModal onClose={()=>setShowInvite(false)} couple={couple}/>}
       {showAI&&(
         <AIModal onClose={()=>setShowAI(false)} subscriptions={subs} expenses={expenses} weeklyIncome={totalIncome}/>
       )}
@@ -1792,10 +2064,25 @@ export default function App() {
   useEffect(()=>{
     (async()=>{
       // 1. Check if we just came back from OAuth / magic link redirect
+      // Check for invite code in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const inviteCode = urlParams.get("invite");
+      if (inviteCode) LS.set("pending_invite", inviteCode);
+
       const token = await auth.getSessionFromHash();
       if (token) {
         const u = await auth.getUser();
-        if (u) { setUser(u); setAuthLoading(false); return; }
+        if (u) {
+          // Join couple if came via invite
+          const inv = LS.get("pending_invite", null);
+          if (inv) {
+            const uname = u.user_metadata?.full_name||u.email?.split("@")[0]||"Partner";
+            await coupleApi.joinByCode(inv, u.id, uname);
+            LS.set("pending_invite", null);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          setUser(u); setAuthLoading(false); return;
+        }
       }
       // 2. Check existing stored session
       if (!DB_READY) {
@@ -1805,6 +2092,15 @@ export default function App() {
         return;
       }
       const u = await auth.getUser().catch(()=>null);
+      if (u) {
+        const inv = LS.get("pending_invite", null);
+        if (inv) {
+          const uname = u.user_metadata?.full_name||u.email?.split("@")[0]||"Partner";
+          await coupleApi.joinByCode(inv, u.id, uname);
+          LS.set("pending_invite", null);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
       setUser(u || null);
       setAuthLoading(false);
     })();
