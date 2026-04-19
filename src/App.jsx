@@ -244,9 +244,14 @@ function LoginScreen({ onLogin }) {
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes scanline{0%{top:-2px}100%{top:100vh}}
         @keyframes pulse2{0%,100%{opacity:.4}50%{opacity:1}}
-        * { box-sizing:border-box }
-        input { outline:none; font-family:inherit }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body,#root{width:100%;height:100%;margin:0;padding:0;background:#070707}
+        body{overflow-x:hidden}
+        input{outline:none;font-family:inherit}
         input::placeholder{color:rgba(255,255,255,.2)}
+        ::-webkit-scrollbar{width:0px;height:0px;background:transparent}
+        ::-webkit-scrollbar-thumb{background:transparent}
+        scrollbar-width:none;
       `}</style>
 
       {/* bg grid */}
@@ -1198,9 +1203,12 @@ function FinanceApp({ user, onSignOut }) {
         @keyframes paidPop{0%{transform:scale(1)}35%{transform:scale(1.2)}100%{transform:scale(1)}}
         @keyframes scanline{0%{top:-2px}100%{top:100vh}}
         @keyframes blink{0%,100%{opacity:.8}50%{opacity:.2}}
-        ::-webkit-scrollbar{width:3px;height:3px}
-        ::-webkit-scrollbar-thumb{background:rgba(232,255,71,.15);border-radius:2px}
-        *{box-sizing:border-box} input,button{outline:none;font-family:inherit}
+        *{box-sizing:border-box;margin:0;padding:0}
+        html,body,#root{margin:0;padding:0;background:#070707}
+        body{overflow-x:hidden}
+        ::-webkit-scrollbar{width:0px;height:0px;background:transparent}
+        ::-webkit-scrollbar-thumb{background:transparent}
+        input,button{outline:none;font-family:inherit}
         input::placeholder{color:rgba(255,255,255,.18)}
         input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         input[type=date],input[type=time]{color-scheme:dark}
