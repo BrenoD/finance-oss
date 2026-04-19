@@ -14,11 +14,7 @@ const DB_READY = SUPABASE_URL !== "YOUR_SUPABASE_URL" && SUPABASE_KEY !== "YOUR_
 // ─────────────────────────────────────────────────────────────────────────────
 const auth = {
   // Sign in with OAuth provider (Google, GitHub) — redirects to provider
-  async signInWithProvider(provider) {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`, {
-      headers: { apikey: SUPABASE_KEY },
-    });
-    // Supabase returns a redirect — follow it
+  signInWithProvider(provider) {
     window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(APP_URL)}`;
   },
 
