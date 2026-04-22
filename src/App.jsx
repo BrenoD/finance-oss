@@ -1002,13 +1002,13 @@ function TogetherTab({couple,user}) {
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",gap:"0.4rem",flexWrap:"wrap"}}>
-                    <span style={{color:isMe?"#E8FF47":"#FF69B4",fontSize:"0.7rem",letterSpacing:"0.08em",fontWeight:600}}>{name.split(" ")[0].toUpperCase()}</span>
-                    <span style={{color:"rgba(255,255,255,0.6)",fontSize:"0.8rem"}}>{typeLabel(item.type,item.label,item.amount)}</span>
+                    <span style={{color:isMe?"#E8FF47":"#FF69B4",fontSize:"0.78rem",letterSpacing:"0.06em",fontWeight:700}}>{name.split(" ")[0].toUpperCase()}</span>
+                    <span style={{color:"rgba(255,255,255,0.7)",fontSize:"0.88rem"}}>{typeLabel(item.type,item.label,item.amount)}</span>
                   </div>
-                  <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>{fmtDate(item.created_at)}</div>
+                  <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.68rem",fontFamily:"'DM Mono',monospace",marginTop:3}}>{fmtDate(item.created_at)}</div>
                 </div>
                 {item.amount&&item.type!=="income"&&(
-                  <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.85rem",color:typeColor(item.type),flexShrink:0}}>{fmt(item.amount)}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"0.95rem",color:typeColor(item.type),flexShrink:0}}>{fmt(item.amount)}</div>
                 )}
               </div>
             );
@@ -1429,11 +1429,11 @@ function WeeklyTab({subs,expenses,income,user}) {
   const weekTotal = weekExpTotal + weekSubsTotal;
   const weekBalance = income - weekTotal;
 
-  const inp={width:"100%",background:"#111",border:"1px solid rgba(255,255,255,0.08)",
-    borderRadius:"8px",color:"#fff",padding:"0.7rem 0.875rem",fontSize:"0.88rem",
+  const inp={width:"100%",background:"#111",border:"1px solid rgba(255,255,255,0.1)",
+    borderRadius:"10px",color:"#fff",padding:"0.875rem 1rem",fontSize:"1rem",
     fontFamily:"'DM Mono',monospace"};
-  const lbl={color:"rgba(255,255,255,0.25)",fontSize:"0.62rem",letterSpacing:"0.15em",
-    display:"block",marginBottom:"0.3rem",textTransform:"uppercase"};
+  const lbl={color:"rgba(255,255,255,0.3)",fontSize:"0.68rem",letterSpacing:"0.15em",
+    display:"block",marginBottom:"0.4rem",textTransform:"uppercase"};
 
   return (
     <div style={{animation:"fadeUp .32s ease both"}}>
@@ -1476,8 +1476,8 @@ function WeeklyTab({subs,expenses,income,user}) {
               borderRadius:"12px",padding:"0.875rem",position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",top:0,left:0,right:0,height:1.5,
                 background:`linear-gradient(90deg,transparent,${s.c}55,transparent)`}}/>
-              <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.55rem",letterSpacing:"0.12em",marginBottom:"0.35rem"}}>{s.l}</div>
-              <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.9rem",color:s.c}}>{fmt(s.v)}</div>
+              <div style={{color:"rgba(255,255,255,0.25)",fontSize:"0.62rem",letterSpacing:"0.12em",marginBottom:"0.4rem"}}>{s.l}</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"1.05rem",color:s.c}}>{fmt(s.v)}</div>
             </div>
           </Tilt>
         ))}
@@ -1513,8 +1513,8 @@ function WeeklyTab({subs,expenses,income,user}) {
           {entries.length} ENTRIES · {fmt(weekExpTotal)}
         </div>
         <button onClick={()=>setShowAddEntry(true)} style={{
-          background:"#FF4757",border:"none",borderRadius:"7px",color:"#fff",
-          padding:"0.4rem 0.8rem",cursor:"pointer",fontWeight:700,fontSize:"0.68rem",letterSpacing:"0.1em",
+          background:"#FF4757",border:"none",borderRadius:"10px",color:"#fff",
+          padding:"0.55rem 1rem",cursor:"pointer",fontWeight:700,fontSize:"0.78rem",letterSpacing:"0.06em",
         }}>+ ADD</button>
       </div>
 
@@ -1536,7 +1536,7 @@ function WeeklyTab({subs,expenses,income,user}) {
               <div style={{position:"absolute",left:0,top:"18%",bottom:"18%",width:2,
                 borderRadius:"0 2px 2px 0",background:"#FF4757"}}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:500,fontSize:"0.85rem"}}>{e.label}</div>
+                <div style={{fontWeight:600,fontSize:"0.92rem"}}>{e.label}</div>
                 <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>
                   {e.paid_date||e.date}{(e.paid_time||e.time)?` · ${e.paid_time||e.time}`:""}
                   {e.note?<span style={{color:"rgba(255,255,255,0.18)",fontStyle:"italic"}}> · {e.note}</span>:null}
@@ -1561,7 +1561,7 @@ function WeeklyTab({subs,expenses,income,user}) {
           background:"rgba(232,255,71,0.04)",border:"1px solid rgba(232,255,71,0.1)",
           borderRadius:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{color:"rgba(255,255,255,0.3)",fontSize:"0.65rem",letterSpacing:"0.14em"}}>WEEK TOTAL</span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1rem",
+          <span style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"1.2rem",
             color:weekBalance>=0?"#E8FF47":"#FF4757"}}>{fmt(weekTotal)}</span>
         </div>
       )}
@@ -1882,13 +1882,14 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
         @keyframes blink{0%,100%{opacity:.8}50%{opacity:.2}}
         *{box-sizing:border-box;margin:0;padding:0}
         html,body,#root{margin:0;padding:0;background:#070707}
-        body{overflow-x:hidden}
+        body{overflow-x:hidden;font-size:16px}
         ::-webkit-scrollbar{width:0px;height:0px}
         ::-webkit-scrollbar-thumb{background:transparent}
         input,button{outline:none;font-family:inherit}
         input::placeholder{color:rgba(255,255,255,.18)}
         input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
         input[type=date],input[type=time]{color-scheme:dark}
+        button{transition:all .15s ease}
       `}</style>
 
       {!DB_READY && <SetupBanner/>}
@@ -1925,37 +1926,37 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
         {/* ── USER BAR ────────────────────────────────────────────────────── */}
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",
           gap:"0.625rem",marginBottom:"0.875rem",animation:"fadeUp .35s ease both"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"0.5rem",
-            background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",
-            borderRadius:"20px",padding:"0.35rem 0.75rem 0.35rem 0.45rem"}}>
-            <div style={{width:22,height:22,borderRadius:"50%",overflow:"hidden",flexShrink:0,
+          <div style={{display:"flex",alignItems:"center",gap:"0.6rem",
+            background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",
+            borderRadius:"24px",padding:"0.45rem 1rem 0.45rem 0.5rem"}}>
+            <div style={{width:28,height:28,borderRadius:"50%",overflow:"hidden",flexShrink:0,
               background:"linear-gradient(135deg,#E8FF47,#A8C000)",
-              display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.65rem",fontWeight:700,color:"#080808"}}>
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.78rem",fontWeight:700,color:"#080808"}}>
               {user?.user_metadata?.avatar_url
                 ? <img src={user.user_metadata.avatar_url} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
                 : (user?.email||"?")[0].toUpperCase()
               }
             </div>
-            <span style={{color:"rgba(255,255,255,0.45)",fontSize:"0.65rem",fontFamily:"'DM Mono',monospace",
-              maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            <span style={{color:"rgba(255,255,255,0.6)",fontSize:"0.78rem",fontFamily:"'DM Mono',monospace",
+              maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {user?.user_metadata?.full_name || user?.email || "User"}
             </span>
           </div>
           <div style={{display:"flex",gap:"0.4rem"}}>
             <button onClick={()=>setShowInvite(true)} style={{
               background:"rgba(255,105,180,0.08)",border:"1px solid rgba(255,105,180,0.25)",
-              borderRadius:"8px",color:"#FF69B4",
-              padding:"0.35rem 0.65rem",cursor:"pointer",fontSize:"0.65rem",
-              letterSpacing:"0.1em",transition:"all .15s",
+              borderRadius:"10px",color:"#FF69B4",
+              padding:"0.5rem 0.875rem",cursor:"pointer",fontSize:"0.75rem",
+              letterSpacing:"0.08em",fontWeight:600,
             }}
               onMouseOver={e=>e.currentTarget.style.background="rgba(255,105,180,0.18)"}
               onMouseOut={e=>e.currentTarget.style.background="rgba(255,105,180,0.08)"}
             >♥ INVITE</button>
             <button onClick={onSignOut} style={{
               background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.2)",
-              borderRadius:"8px",color:"rgba(255,71,87,0.7)",
-              padding:"0.35rem 0.65rem",cursor:"pointer",fontSize:"0.65rem",
-              letterSpacing:"0.1em",transition:"all .15s",
+              borderRadius:"10px",color:"rgba(255,71,87,0.7)",
+              padding:"0.5rem 0.875rem",cursor:"pointer",fontSize:"0.75rem",
+              letterSpacing:"0.08em",fontWeight:600,
             }}
               onMouseOver={e=>{e.currentTarget.style.background="rgba(255,71,87,0.15)";e.currentTarget.style.color="#FF4757";}}
               onMouseOut={e=>{e.currentTarget.style.background="rgba(255,71,87,0.08)";e.currentTarget.style.color="rgba(255,71,87,0.7)";}}
@@ -2002,7 +2003,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 ):(
                   <div onClick={()=>setEditInc(true)} style={{cursor:"pointer",display:"flex",alignItems:"baseline",gap:3}}>
                     <span style={{color:"rgba(255,255,255,0.22)",fontFamily:"'DM Mono',monospace",fontSize:"0.95rem"}}>{GBP}</span>
-                    <span style={{fontSize:"2.1rem",fontWeight:600,letterSpacing:"-0.02em",fontFamily:"'DM Mono',monospace"}}>
+                    <span style={{fontSize:"2.8rem",fontWeight:700,letterSpacing:"-0.03em",fontFamily:"'DM Mono',monospace"}}>
                       {income.toFixed(2)}
                     </span>
                     <span style={{color:"rgba(255,255,255,0.12)",fontSize:"0.72rem",marginLeft:4}}>✎</span>
@@ -2096,10 +2097,10 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                   {l:"BALANCE",v:fmt(balance),   c:balance>=0?"#2ED573":"#FF4757"},
                   {l:"SAVED",  v:`${totalIncome>0?((balance/totalIncome)*100).toFixed(0):0}%`, c:"#E8FF47"},
                 ].map(s=>(
-                  <div key={s.l} style={{background:"#111",border:"1px solid rgba(255,255,255,0.055)",
-                    borderRadius:"9px",padding:"0.6rem 0.875rem",textAlign:"center",minWidth:78}}>
-                    <div style={{color:s.c,fontWeight:500,fontSize:"0.92rem",fontFamily:"'DM Mono',monospace"}}>{s.v}</div>
-                    <div style={{color:"rgba(255,255,255,0.18)",fontSize:"0.58rem",letterSpacing:"0.1em",marginTop:2}}>{s.l}</div>
+                  <div key={s.l} style={{background:"#111",border:"1px solid rgba(255,255,255,0.07)",
+                    borderRadius:"12px",padding:"0.75rem 1rem",textAlign:"center",minWidth:88}}>
+                    <div style={{color:s.c,fontWeight:600,fontSize:"1rem",fontFamily:"'DM Mono',monospace"}}>{s.v}</div>
+                    <div style={{color:"rgba(255,255,255,0.25)",fontSize:"0.62rem",letterSpacing:"0.1em",marginTop:3}}>{s.l}</div>
                   </div>
                 ))}
               </div>
@@ -2131,8 +2132,8 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 <span style={{color:pct>80?"#FF4757":pct>60?"#FFA502":"#E8FF47",
                   fontSize:"0.6rem",fontFamily:"'DM Mono',monospace"}}>{pct}%</span>
               </div>
-              <div style={{height:3.5,background:"rgba(255,255,255,0.05)",borderRadius:2,overflow:"hidden"}}>
-                <div style={{height:"100%",borderRadius:2,
+              <div style={{height:5,background:"rgba(255,255,255,0.05)",borderRadius:3,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:3,
                   background:pct>80?"linear-gradient(90deg,#FF4757,#FF6B81)":
                               pct>60?"linear-gradient(90deg,#FFA502,#FFD32A)":
                               "linear-gradient(90deg,#E8FF47,#C8E600)",
@@ -2167,10 +2168,10 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
           borderRadius:"10px",padding:3}}>
           {TABS.map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)} style={{
-              flex:1,padding:"0.5rem 0.25rem",border:"none",borderRadius:"7px",cursor:"pointer",
-              fontSize:"0.65rem",fontWeight:600,letterSpacing:"0.08em",transition:"all .15s",
+              flex:1,padding:"0.6rem 0.25rem",border:"none",borderRadius:"8px",cursor:"pointer",
+              fontSize:"0.72rem",fontWeight:600,letterSpacing:"0.06em",transition:"all .15s",
               background:tab===t.k?"#E8FF47":"transparent",
-              color:tab===t.k?"#080808":"rgba(255,255,255,0.28)",
+              color:tab===t.k?"#080808":"rgba(255,255,255,0.35)",
               whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
             }}>{t.l}</button>
           ))}
@@ -2185,9 +2186,9 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 {subs.length} ACTIVE · {fmt(totalSubs)}/WK
               </div>
               <button onClick={()=>setShowAdd(true)} style={{
-                background:"#E8FF47",border:"none",borderRadius:"7px",color:"#080808",
-                padding:"0.45rem 0.875rem",cursor:"pointer",fontWeight:700,
-                fontSize:"0.72rem",letterSpacing:"0.1em",transition:"background .15s",
+                background:"#E8FF47",border:"none",borderRadius:"10px",color:"#080808",
+                padding:"0.55rem 1.1rem",cursor:"pointer",fontWeight:700,
+                fontSize:"0.82rem",letterSpacing:"0.08em",
               }}
                 onMouseOver={e=>e.currentTarget.style.background="#fff"}
                 onMouseOut={e=>e.currentTarget.style.background="#E8FF47"}
@@ -2197,14 +2198,14 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
               {subs.map((sub,i)=>(
                 <Tilt key={sub.id} style={{animation:`fadeUp .32s ease ${i*.055}s both`}}>
                   <div style={{background:"#0c0c0c",
-                    border:`1px solid ${paidAnim[sub.id]?"rgba(46,213,115,.45)":"rgba(255,255,255,0.055)"}`,
-                    borderRadius:"12px",padding:"0.875rem 1rem",
-                    display:"flex",alignItems:"center",gap:"0.875rem",
+                    border:`1px solid ${paidAnim[sub.id]?"rgba(46,213,115,.45)":"rgba(255,255,255,0.07)"}`,
+                    borderRadius:"14px",padding:"1rem 1.1rem",
+                    display:"flex",alignItems:"center",gap:"1rem",
                     transition:"border-color .3s",position:"relative",overflow:"hidden"}}>
-                    <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
-                      borderRadius:"0 2px 2px 0",background:ACCENTS[sub.ci]}}/>
-                    <div style={{width:42,height:42,borderRadius:"9px",flexShrink:0,overflow:"hidden",
-                      background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.055)",
+                    <div style={{position:"absolute",left:0,top:"12%",bottom:"12%",width:3,
+                      borderRadius:"0 3px 3px 0",background:ACCENTS[sub.ci]}}/>
+                    <div style={{width:48,height:48,borderRadius:"11px",flexShrink:0,overflow:"hidden",
+                      background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",
                       display:"flex",alignItems:"center",justifyContent:"center"}}>
                       {!sub.logoErr?(
                         <img src={getLogoUrl(sub.title)} alt={sub.title}
@@ -2215,13 +2216,13 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                       )}
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontWeight:500,fontSize:"0.88rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.title}</div>
+                      <div style={{fontWeight:600,fontSize:"0.95rem",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sub.title}</div>
                       <div style={{color:"rgba(255,255,255,0.22)",fontSize:"0.65rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>
                         {sub.history?.length>0?`${sub.history[0].date} · ${sub.history[0].time}`:"—"}
                       </div>
                     </div>
                     <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.9rem"}}>{fmt(sub.amount)}</div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"1rem"}}>{fmt(sub.amount)}</div>
                       <div style={{color:"rgba(255,255,255,0.18)",fontSize:"0.58rem",letterSpacing:"0.08em"}}>/WEEK</div>
                     </div>
                     <div style={{display:"flex",gap:"0.35rem",flexShrink:0}}>
@@ -2229,8 +2230,8 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                         background:paidAnim[sub.id]?"#2ED573":"rgba(46,213,115,.07)",
                         border:`1px solid ${paidAnim[sub.id]?"#2ED573":"rgba(46,213,115,.22)"}`,
                         borderRadius:"7px",color:paidAnim[sub.id]?"#080808":"#2ED573",
-                        padding:"0.3rem 0.6rem",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,
-                        letterSpacing:"0.08em",animation:paidAnim[sub.id]?"paidPop .9s ease":"none",
+                        padding:"0.45rem 0.875rem",cursor:"pointer",fontSize:"0.75rem",fontWeight:700,
+                        letterSpacing:"0.06em",animation:paidAnim[sub.id]?"paidPop .9s ease":"none",
                         transition:"all .16s",whiteSpace:"nowrap",
                       }}>{paidAnim[sub.id]?"✓ PAID":"PAID"}</button>
                       <button onClick={()=>setHistId(sub.id)} style={{
@@ -2275,16 +2276,16 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 {expenses.length} ITEMS · {fmt(totalExp)}/WK
               </div>
               <button onClick={()=>setShowAddExp(true)} style={{
-                background:"#FF4757",border:"none",borderRadius:"7px",color:"#fff",
-                padding:"0.45rem 0.875rem",cursor:"pointer",fontWeight:700,
-                fontSize:"0.72rem",letterSpacing:"0.1em",
+                background:"#FF4757",border:"none",borderRadius:"10px",color:"#fff",
+                padding:"0.55rem 1.1rem",cursor:"pointer",fontWeight:700,
+                fontSize:"0.82rem",letterSpacing:"0.08em",
               }}>+ NEW</button>
             </div>
             <div style={{display:"grid",gap:"0.5rem"}}>
               {expenses.map((exp,i)=>(
                 <Tilt key={exp.id} style={{animation:`fadeUp .32s ease ${i*.055}s both`}}>
-                  <div style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
-                    borderRadius:"12px",padding:"0.875rem 1rem",display:"flex",alignItems:"center",gap:"0.875rem",
+                  <div style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.07)",
+                    borderRadius:"14px",padding:"1rem 1.1rem",display:"flex",alignItems:"center",gap:"1rem",
                     position:"relative",overflow:"hidden"}}>
                     <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
                       borderRadius:"0 2px 2px 0",background:"#FF4757"}}/>
@@ -2292,14 +2293,14 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                       border:"1px solid rgba(255,71,87,.12)",display:"flex",alignItems:"center",
                       justifyContent:"center",fontSize:"1rem",flexShrink:0,color:"#FF4757"}}>◈</div>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:500,fontSize:"0.88rem"}}>{exp.label}</div>
+                      <div style={{fontWeight:600,fontSize:"0.95rem"}}>{exp.label}</div>
                       {(exp.paid_date||exp.date)&&(
                         <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>
                           {exp.paid_date||exp.date}{(exp.paid_time||exp.time)?` · ${exp.paid_time||exp.time}`:""}
                         </div>
                       )}
                     </div>
-                    <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.9rem",color:"#FF4757"}}>{fmt(exp.amount)}</div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"1rem",color:"#FF4757"}}>{fmt(exp.amount)}</div>
                     <button onClick={()=>removeExp(exp.id)} style={{
                       background:"rgba(255,71,87,.05)",border:"1px solid rgba(255,71,87,.12)",
                       borderRadius:"7px",color:"rgba(255,71,87,.55)",
@@ -2334,11 +2335,11 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                       {fmt(item.v)} · {totalIncome>0?((item.v/totalIncome)*100).toFixed(0):0}%
                     </span>
                   </div>
-                  <div style={{height:4,background:"rgba(255,255,255,.04)",borderRadius:2,overflow:"hidden"}}>
-                    <div style={{height:"100%",borderRadius:2,background:item.c,
+                  <div style={{height:6,background:"rgba(255,255,255,.05)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",borderRadius:3,background:item.c,
                       width:`${totalIncome>0?Math.min((item.v/totalIncome)*100,100):0}%`,
                       transition:"width .8s cubic-bezier(.34,1.56,.64,1)",
-                      boxShadow:`0 0 5px ${item.c}77`}}/>
+                      boxShadow:`0 0 8px ${item.c}88`}}/>
                   </div>
                 </div>
               ))}
@@ -2600,8 +2601,8 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                     animation:`fadeUp .28s ease ${i*.04}s both`}}>
                     <div style={{width:6,height:6,borderRadius:"50%",background:"#2ED573",flexShrink:0,boxShadow:"0 0 5px #2ED573"}}/>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:"0.8rem",fontWeight:400}}>{h.date}</div>
-                      <div style={{color:"rgba(255,255,255,0.22)",fontSize:"0.65rem",fontFamily:"'DM Mono',monospace"}}>{h.time}</div>
+                      <div style={{fontSize:"0.88rem",fontWeight:500}}>{h.date}</div>
+                      <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.72rem",fontFamily:"'DM Mono',monospace"}}>{h.time}</div>
                     </div>
                     <div style={{fontFamily:"'DM Mono',monospace",fontSize:"0.8rem",color:"rgba(255,255,255,0.35)"}}>{fmt(histSub.amount)}</div>
                   </div>
