@@ -1486,11 +1486,11 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
   const myName     = user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Me";
   const herName    = couple?.partner_name||partnerName||"Partner";
   const totalSubs  = subs.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const totalExp   = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const herTotalSubs = herSubs.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const herTotalExp  = herExpenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const combinedSubs = couple?.partner_id ? totalSubs + herTotalSubs : totalSubs;
   const combinedExp  = couple?.partner_id ? totalExp + herTotalExp  : totalExp;
-  const totalExp   = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
   const totalOut   = couple?.partner_id ? combinedSubs + combinedExp : totalSubs+totalExp;
   // Use real partner data from DB when couple is connected, fallback to manual
   const effectivePartnerIncome = couple?.partner_id ? herIncome : partnerIncome;
