@@ -300,18 +300,14 @@ function JoinedBanner({ ownerName, onClose }) {
 //  SAVINGS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 function SavingsTab({ user, couple }) {
-  const [entries, setEntries]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [showAdd, setShowAdd]       = useState(false);
-  const [addType, setAddType]       = useState("in"); // "in" | "out"
-  const [newEntry, setNewEntry]     = useState({ label: "", amount: "" });
-  const [saving, setSaving]         = useState(false);
+  const [entries, setEntries]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [showAdd, setShowAdd]   = useState(false);
+  const [addType, setAddType]   = useState("in");
+  const [newEntry, setNewEntry] = useState({ label: "", amount: "" });
+  const [saving, setSaving]     = useState(false);
   const [projection, setProjection] = useState(4);
 
-  const GBP = "\u00a3";
-  const fmt = (v) => GBP + parseFloat(v||0).toFixed(2);
-
-  // Load from Supabase
   const load = async () => {
     setLoading(true);
     try {
@@ -321,7 +317,7 @@ function SavingsTab({ user, couple }) {
       } else {
         setEntries(LS.get("fm_savings", []));
       }
-    } catch(e) { console.error("[SAVINGS] load error:", e); }
+    } catch(e) { console.error("[SAVINGS]", e); }
     setLoading(false);
   };
 
@@ -331,28 +327,21 @@ function SavingsTab({ user, couple }) {
     if (!newEntry.label || !newEntry.amount) return;
     setSaving(true);
     const payload = {
-      user_id: user?.id,
-      type: addType,
-      label: newEntry.label,
-      amount: parseFloat(newEntry.amount),
-      created_at: new Date().toISOString(),
+      user_id: user?.id, type: addType,
+      label: newEntry.label, amount: parseFloat(newEntry.amount),
     };
     try {
       if (DB_READY && user?.id) {
         const [row] = await sb.insert("savings_entries", payload);
         setEntries(p => [row, ...p]);
-        // Log to activity feed
         const uname = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
-        coupleApi.log(couple?.id, user?.id, uname,
-          addType === "in" ? "savings_in" : "savings_out",
-          newEntry.label, parseFloat(newEntry.amount));
+        coupleApi.log(couple?.id, user?.id, uname, addType==="in"?"savings_in":"savings_out", newEntry.label, parseFloat(newEntry.amount));
       } else {
-        const row = { ...payload, id: Date.now() };
+        const row = { ...payload, id: Date.now(), created_at: new Date().toISOString() };
         const updated = [row, ...entries];
-        setEntries(updated);
-        LS.set("fm_savings", updated);
+        setEntries(updated); LS.set("fm_savings", updated);
       }
-    } catch(e) { console.error("[SAVINGS] add error:", e); }
+    } catch(e) { console.error("[SAVINGS] add:", e); }
     setNewEntry({ label: "", amount: "" });
     setShowAdd(false);
     setSaving(false);
@@ -361,190 +350,224 @@ function SavingsTab({ user, couple }) {
   const removeEntry = async (id) => {
     try {
       if (DB_READY) await sb.delete("savings_entries", id);
-      else {
-        const updated = entries.filter(e => e.id !== id);
-        LS.set("fm_savings", updated);
-      }
+      else { const u = entries.filter(e=>e.id!==id); LS.set("fm_savings",u); }
       setEntries(p => p.filter(e => e.id !== id));
     } catch(e) { console.error(e); }
   };
 
-  // Calculations
-  const totalIn  = entries.filter(e => e.type === "in").reduce((s,e) => s+parseFloat(e.amount||0), 0);
-  const totalOut = entries.filter(e => e.type === "out").reduce((s,e) => s+parseFloat(e.amount||0), 0);
+  const totalIn  = entries.filter(e=>e.type==="in").reduce((s,e)=>s+parseFloat(e.amount||0),0);
+  const totalOut = entries.filter(e=>e.type==="out").reduce((s,e)=>s+parseFloat(e.amount||0),0);
   const balance  = totalIn - totalOut;
-  // Weekly average saved (only "in" entries)
-  const weeklyAvg = entries.filter(e => e.type === "in").length > 0
-    ? totalIn / Math.max(1, Math.ceil(entries.filter(e=>e.type==="in").length / 1))
-    : 0;
-  // Simple weekly rate based on last entries
-  const inEntries = entries.filter(e => e.type === "in");
-  const weeklyRate = inEntries.length > 0 ? totalIn / Math.max(1, inEntries.length) : 0;
+  const inEntries = entries.filter(e=>e.type==="in");
+  const weeklyRate = inEntries.length > 0 ? totalIn / inEntries.length : 0;
   const projected  = balance + (weeklyRate * projection);
-
-  const inp = {
-    width: "100%", background: "#111", border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "8px", color: "#fff", padding: "0.7rem 0.875rem", fontSize: "0.88rem",
-    fontFamily: "'DM Mono',monospace",
-  };
-  const lbl = {
-    color: "rgba(255,255,255,0.25)", fontSize: "0.62rem", letterSpacing: "0.15em",
-    display: "block", marginBottom: "0.3rem", textTransform: "uppercase",
-  };
 
   const fmtDate = (iso) => {
     if (!iso) return "";
     const d = new Date(iso);
-    return d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" })
-      + " \u00b7 " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+    return d.toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})
+      + " · " + d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+  };
+
+  const inp = {
+    width:"100%", background:"#111", border:"1px solid rgba(255,255,255,0.08)",
+    borderRadius:"10px", color:"#fff", padding:"0.875rem 1rem", fontSize:"1rem",
+    fontFamily:"'DM Mono',monospace",
+  };
+  const lbl = {
+    color:"rgba(255,255,255,0.3)", fontSize:"0.65rem", letterSpacing:"0.15em",
+    display:"block", marginBottom:"0.4rem", textTransform:"uppercase",
   };
 
   return (
-    <div style={{ animation: "fadeUp .32s ease both" }}>
+    <div style={{animation:"fadeUp .32s ease both"}}>
 
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.5rem", marginBottom: "1rem" }}>
-        {[
-          { l: "GUARDADO", v: totalIn, c: "#2ED573" },
-          { l: "GASTO", v: totalOut, c: "#FF4757" },
-          { l: "DISPON\u00cdVEL", v: balance, c: balance >= 0 ? "#E8FF47" : "#FF4757" },
-        ].map(s => (
-          <Tilt key={s.l}>
-            <div style={{
-              background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.055)",
-              borderRadius: "12px", padding: "0.875rem", position: "relative", overflow: "hidden",
-            }}>
-              <div style={{ position:"absolute",top:0,left:0,right:0,height:1.5,
-                background:`linear-gradient(90deg,transparent,${s.c}55,transparent)` }}/>
-              <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.55rem",letterSpacing:"0.12em",marginBottom:"0.35rem" }}>{s.l}</div>
-              <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.9rem",color:s.c }}>{fmt(s.v)}</div>
+      {/* BIG balance card */}
+      <Tilt style={{marginBottom:"1rem"}}>
+        <div style={{
+          background:"#0c0c0c", border:"1px solid rgba(46,213,115,0.2)",
+          borderRadius:"16px", padding:"1.5rem 1.75rem",
+          position:"relative", overflow:"hidden",
+        }}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:2,
+            background:"linear-gradient(90deg,transparent,#2ED573,transparent)"}}/>
+          <div style={{position:"absolute",top:-40,right:-20,width:160,height:160,
+            borderRadius:"50%",background:"radial-gradient(circle,rgba(46,213,115,0.06) 0%,transparent 70%)"}}/>
+
+          <div style={{color:"rgba(255,255,255,0.25)",fontSize:"0.62rem",letterSpacing:"0.2em",marginBottom:"0.5rem"}}>
+            DISPONÍVEL AGORA
+          </div>
+          <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,
+            fontSize:"3rem",letterSpacing:"-0.02em",
+            color:balance>=0?"#2ED573":"#FF4757",lineHeight:1}}>
+            {GBP}{Math.abs(balance).toFixed(2)}
+          </div>
+          {balance<0&&<div style={{color:"#FF4757",fontSize:"0.65rem",marginTop:"0.3rem",letterSpacing:"0.1em"}}>NEGATIVO</div>}
+
+          <div style={{display:"flex",gap:"2rem",marginTop:"1.25rem"}}>
+            <div>
+              <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.14em",marginBottom:"0.2rem"}}>GUARDADO</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1.1rem",color:"#2ED573"}}>+{GBP}{totalIn.toFixed(2)}</div>
             </div>
-          </Tilt>
-        ))}
-      </div>
+            <div>
+              <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.14em",marginBottom:"0.2rem"}}>GASTO</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1.1rem",color:"#FF4757"}}>-{GBP}{totalOut.toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.14em",marginBottom:"0.2rem"}}>MÉDIA/SEM</div>
+              <div style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1.1rem",color:"#E8FF47"}}>{GBP}{weeklyRate.toFixed(2)}</div>
+            </div>
+          </div>
+
+          {/* progress bar */}
+          {totalIn > 0 && (
+            <div style={{marginTop:"1rem"}}>
+              <div style={{height:4,background:"rgba(255,255,255,0.05)",borderRadius:2,overflow:"hidden"}}>
+                <div style={{
+                  height:"100%",borderRadius:2,
+                  background:"linear-gradient(90deg,#2ED573,#E8FF47)",
+                  width:`${Math.min((balance/totalIn)*100,100)}%`,
+                  transition:"width .8s cubic-bezier(.34,1.56,.64,1)",
+                  boxShadow:"0 0 8px rgba(46,213,115,0.5)",
+                }}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:"0.3rem"}}>
+                <span style={{color:"rgba(255,255,255,0.18)",fontSize:"0.58rem",letterSpacing:"0.1em"}}>0%</span>
+                <span style={{color:"rgba(255,255,255,0.18)",fontSize:"0.58rem",letterSpacing:"0.1em"}}>
+                  {totalIn>0?((balance/totalIn)*100).toFixed(0):0}% intacto
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Tilt>
 
       {/* Projection card */}
       <div style={{
-        background: "#0c0c0c", border: "1px solid rgba(232,255,71,0.12)",
-        borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "1rem",
-        position: "relative", overflow: "hidden",
+        background:"#0c0c0c", border:"1px solid rgba(232,255,71,0.12)",
+        borderRadius:"14px", padding:"1.1rem 1.25rem", marginBottom:"1rem",
+        position:"relative", overflow:"hidden",
       }}>
-        <div style={{ position:"absolute",top:0,left:0,right:0,height:1.5,
-          background:"linear-gradient(90deg,transparent,rgba(232,255,71,0.4),transparent)" }}/>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
-          <div style={{ color:"rgba(255,255,255,0.25)",fontSize:"0.6rem",letterSpacing:"0.15em" }}>PROJE\u00c7\u00c3O</div>
-          <div style={{ display:"flex", alignItems:"center", gap:"0.4rem" }}>
-            {[2,4,8,12,26].map(w => (
+        <div style={{position:"absolute",top:0,left:0,right:0,height:1.5,
+          background:"linear-gradient(90deg,transparent,rgba(232,255,71,0.4),transparent)"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+          <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.62rem",letterSpacing:"0.15em"}}>PROJECÇÃO</div>
+          <div style={{display:"flex",gap:"0.3rem"}}>
+            {[2,4,8,12,26].map(w=>(
               <button key={w} onClick={()=>setProjection(w)} style={{
-                padding:"0.2rem 0.5rem", border:"1px solid",
-                borderRadius:"5px", cursor:"pointer", fontSize:"0.58rem",
-                fontFamily:"'DM Mono',monospace", fontWeight:600,
-                background: projection===w ? "#E8FF47" : "transparent",
-                borderColor: projection===w ? "#E8FF47" : "rgba(255,255,255,0.12)",
-                color: projection===w ? "#080808" : "rgba(255,255,255,0.3)",
+                padding:"0.3rem 0.6rem",border:"1px solid",borderRadius:"6px",cursor:"pointer",
+                fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",fontWeight:700,
+                background:projection===w?"#E8FF47":"transparent",
+                borderColor:projection===w?"#E8FF47":"rgba(255,255,255,0.12)",
+                color:projection===w?"#080808":"rgba(255,255,255,0.3)",
+                transition:"all .15s",
               }}>{w}W</button>
             ))}
           </div>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
+        <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between"}}>
           <div>
-            <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.12em",marginBottom:"0.25rem" }}>
-              M\u00c9DIA/SEMANA
+            <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.6rem",letterSpacing:"0.12em",marginBottom:"0.3rem"}}>
+              COM {projection} SEMANAS
             </div>
-            <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"1rem",color:"#2ED573" }}>
-              {fmt(weeklyRate)}
+            <div style={{fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"2rem",color:"#E8FF47",letterSpacing:"-0.02em"}}>
+              {GBP}{projected.toFixed(2)}
             </div>
           </div>
-          <div>
-            <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.12em",marginBottom:"0.25rem" }}>
-              EM {projection} SEMANAS
-            </div>
-            <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1rem",color:"#E8FF47" }}>
-              {fmt(projected)}
+          <div style={{textAlign:"right"}}>
+            <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.1em",marginBottom:"0.2rem"}}>+POR SEMANA</div>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"1rem",color:"#2ED573",fontWeight:600}}>
+              +{GBP}{weeklyRate.toFixed(2)}
             </div>
           </div>
         </div>
-        {/* Progress bar */}
-        <div style={{ marginTop:"0.875rem", height:3, background:"rgba(255,255,255,0.05)", borderRadius:2, overflow:"hidden" }}>
-          <div style={{
-            height:"100%", borderRadius:2,
-            background:"linear-gradient(90deg,#2ED573,#E8FF47)",
-            width:`${Math.min((balance/Math.max(projected,1))*100,100)}%`,
-            transition:"width .7s cubic-bezier(.34,1.56,.64,1)",
-            boxShadow:"0 0 6px rgba(232,255,71,.5)",
-          }}/>
-        </div>
       </div>
 
-      {/* Header + add button */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
-        <div style={{ color:"rgba(255,255,255,0.18)",fontSize:"0.6rem",letterSpacing:"0.15em",fontFamily:"'DM Mono',monospace" }}>
-          {entries.length} ENTRADAS
-        </div>
-        <div style={{ display:"flex", gap:"0.4rem" }}>
-          <button onClick={()=>{setAddType("out");setShowAdd(true);}} style={{
-            background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.25)",
-            borderRadius:"7px",color:"#FF4757",padding:"0.4rem 0.75rem",
-            cursor:"pointer",fontWeight:700,fontSize:"0.68rem",letterSpacing:"0.1em",
-          }}>- GASTAR</button>
-          <button onClick={()=>{setAddType("in");setShowAdd(true);}} style={{
-            background:"rgba(46,213,115,0.1)",border:"1px solid rgba(46,213,115,0.3)",
-            borderRadius:"7px",color:"#2ED573",padding:"0.4rem 0.75rem",
-            cursor:"pointer",fontWeight:700,fontSize:"0.68rem",letterSpacing:"0.1em",
-          }}>+ GUARDAR</button>
-        </div>
+      {/* Action buttons */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.5rem",marginBottom:"1.25rem"}}>
+        <button onClick={()=>{setAddType("in");setShowAdd(true);}} style={{
+          padding:"0.875rem",background:"rgba(46,213,115,0.08)",
+          border:"1px solid rgba(46,213,115,0.3)",borderRadius:"12px",
+          color:"#2ED573",cursor:"pointer",fontWeight:700,
+          fontSize:"0.85rem",letterSpacing:"0.08em",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem",
+          transition:"all .15s",
+        }}
+          onMouseOver={e=>e.currentTarget.style.background="rgba(46,213,115,0.15)"}
+          onMouseOut={e=>e.currentTarget.style.background="rgba(46,213,115,0.08)"}
+        >
+          <span style={{fontSize:"1.1rem"}}>↑</span> GUARDAR
+        </button>
+        <button onClick={()=>{setAddType("out");setShowAdd(true);}} style={{
+          padding:"0.875rem",background:"rgba(255,71,87,0.08)",
+          border:"1px solid rgba(255,71,87,0.3)",borderRadius:"12px",
+          color:"#FF4757",cursor:"pointer",fontWeight:700,
+          fontSize:"0.85rem",letterSpacing:"0.08em",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:"0.5rem",
+          transition:"all .15s",
+        }}
+          onMouseOver={e=>e.currentTarget.style.background="rgba(255,71,87,0.15)"}
+          onMouseOut={e=>e.currentTarget.style.background="rgba(255,71,87,0.08)"}
+        >
+          <span style={{fontSize:"1.1rem"}}>↓</span> GASTAR
+        </button>
       </div>
 
-      {/* Entries list */}
+      {/* Entries */}
+      <div style={{color:"rgba(255,255,255,0.18)",fontSize:"0.6rem",letterSpacing:"0.15em",
+        fontFamily:"'DM Mono',monospace",marginBottom:"0.625rem"}}>
+        {entries.length} ENTRADAS
+      </div>
+
       {loading ? (
-        <div style={{ textAlign:"center", padding:"2rem 0" }}>
-          <div style={{ width:28,height:28,border:"2px solid rgba(232,255,71,0.1)",borderTop:"2px solid #E8FF47",
-            borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto" }}/>
+        <div style={{textAlign:"center",padding:"2rem 0"}}>
+          <div style={{width:28,height:28,border:"2px solid rgba(232,255,71,0.1)",borderTop:"2px solid #E8FF47",
+            borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/>
         </div>
-      ) : entries.length === 0 ? (
-        <div style={{ textAlign:"center",padding:"3rem 0",color:"rgba(255,255,255,0.1)",
-          fontSize:"0.68rem",letterSpacing:"0.15em" }}>
-          NENHUMA ENTRADA AINDA
+      ) : entries.length===0 ? (
+        <div style={{textAlign:"center",padding:"3rem 0",color:"rgba(255,255,255,0.1)",
+          fontSize:"0.72rem",letterSpacing:"0.15em"}}>
+          NENHUMA ENTRADA AINDA<br/>
+          <span style={{fontSize:"0.65rem",marginTop:"0.5rem",display:"block"}}>Clica em GUARDAR para começar</span>
         </div>
       ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:"0.4rem" }}>
-          {entries.map((e, i) => {
-            const isIn = e.type === "in";
+        <div style={{display:"flex",flexDirection:"column",gap:"0.5rem"}}>
+          {entries.map((e,i)=>{
+            const isIn = e.type==="in";
             return (
               <div key={e.id} style={{
                 background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
-                borderRadius:"10px",padding:"0.7rem 0.875rem",
-                display:"flex",alignItems:"center",gap:"0.75rem",
+                borderRadius:"12px",padding:"0.875rem 1rem",
+                display:"flex",alignItems:"center",gap:"0.875rem",
                 animation:`fadeUp .28s ease ${i*.03}s both`,
                 position:"relative",overflow:"hidden",
               }}>
-                <div style={{ position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
-                  borderRadius:"0 2px 2px 0",
-                  background:isIn?"#2ED573":"#FF4757" }}/>
+                <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:3,
+                  borderRadius:"0 3px 3px 0",background:isIn?"#2ED573":"#FF4757"}}/>
                 <div style={{
-                  width:32,height:32,borderRadius:"8px",flexShrink:0,
+                  width:40,height:40,borderRadius:"10px",flexShrink:0,
                   background:isIn?"rgba(46,213,115,0.08)":"rgba(255,71,87,0.08)",
                   border:`1px solid ${isIn?"rgba(46,213,115,0.2)":"rgba(255,71,87,0.2)"}`,
                   display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:"0.9rem",
-                }}>{isIn ? "\u2191" : "\u2193"}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:500, fontSize:"0.85rem" }}>{e.label}</div>
-                  <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",
-                    fontFamily:"'DM Mono',monospace",marginTop:2 }}>
+                  fontSize:"1.2rem",color:isIn?"#2ED573":"#FF4757",fontWeight:700,
+                }}>{isIn?"↑":"↓"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:"0.9rem"}}>{e.label}</div>
+                  <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.65rem",
+                    fontFamily:"'DM Mono',monospace",marginTop:3}}>
                     {fmtDate(e.created_at)}
                   </div>
                 </div>
                 <div style={{
-                  fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"0.9rem",
+                  fontFamily:"'DM Mono',monospace",fontWeight:700,fontSize:"1rem",
                   color:isIn?"#2ED573":"#FF4757",flexShrink:0,
-                }}>{isIn?"+":"-"}{fmt(e.amount)}</div>
+                }}>{isIn?"+":"-"}{GBP}{parseFloat(e.amount).toFixed(2)}</div>
                 <button onClick={()=>removeEntry(e.id)} style={{
                   background:"rgba(255,71,87,.05)",border:"1px solid rgba(255,71,87,.12)",
-                  borderRadius:"6px",color:"rgba(255,71,87,.5)",
-                  width:24,height:24,cursor:"pointer",fontSize:"0.78rem",
+                  borderRadius:"7px",color:"rgba(255,71,87,.5)",
+                  width:28,height:28,cursor:"pointer",fontSize:"1rem",
                   display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
-                }}>\u00d7</button>
+                }}>×</button>
               </div>
             );
           })}
@@ -552,66 +575,73 @@ function SavingsTab({ user, couple }) {
       )}
 
       {/* Add Modal */}
-      {showAdd && (
-        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:700,
+      {showAdd&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:700,
           display:"flex",alignItems:"center",justifyContent:"center",
-          backdropFilter:"blur(14px)",padding:"1rem" }}>
-          <div style={{ background:"#090909",border:"1px solid rgba(255,255,255,0.09)",
-            borderRadius:"16px",padding:"1.5rem",maxWidth:360,width:"100%",
-            animation:"popIn .22s ease both" }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.1rem" }}>
+          backdropFilter:"blur(14px)",padding:"1rem"}}>
+          <div style={{background:"#090909",border:"1px solid rgba(255,255,255,0.09)",
+            borderRadius:"18px",padding:"1.75rem",maxWidth:380,width:"100%",
+            animation:"popIn .22s ease both"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.25rem"}}>
               <div>
-                <div style={{ fontWeight:600,fontSize:"0.88rem",
-                  color:addType==="in"?"#2ED573":"#FF4757" }}>
-                  {addType==="in"?"\u2191 GUARDAR DINHEIRO":"\u2193 REGISTAR GASTO"}
+                <div style={{fontWeight:700,fontSize:"1rem",
+                  color:addType==="in"?"#2ED573":"#FF4757"}}>
+                  {addType==="in"?"↑ Guardar dinheiro":"↓ Registar gasto"}
                 </div>
-                <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",marginTop:2,letterSpacing:"0.1em" }}>
+                <div style={{color:"rgba(255,255,255,0.25)",fontSize:"0.72rem",marginTop:3}}>
                   {addType==="in"?"Adiciona ao teu guardado":"Retira do teu guardado"}
                 </div>
               </div>
-              <button onClick={()=>setShowAdd(false)} style={{ background:"none",border:"none",
-                color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:18,padding:0 }}>\u00d7</button>
+              <button onClick={()=>setShowAdd(false)} style={{background:"none",border:"none",
+                color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:20,padding:0}}>×</button>
             </div>
-            {/* Toggle in/out */}
-            <div style={{ display:"flex",gap:"0.4rem",marginBottom:"1rem" }}>
-              {[{k:"in",l:"+ GUARDAR",c:"#2ED573"},{k:"out",l:"- GASTAR",c:"#FF4757"}].map(t=>(
+
+            {/* Toggle */}
+            <div style={{display:"flex",gap:"0.5rem",marginBottom:"1.25rem"}}>
+              {[{k:"in",l:"↑ GUARDAR",c:"#2ED573"},{k:"out",l:"↓ GASTAR",c:"#FF4757"}].map(t=>(
                 <button key={t.k} onClick={()=>setAddType(t.k)} style={{
-                  flex:1,padding:"0.5rem",border:"1px solid",borderRadius:"8px",cursor:"pointer",
-                  fontSize:"0.7rem",fontWeight:700,letterSpacing:"0.08em",
+                  flex:1,padding:"0.65rem",border:"1px solid",borderRadius:"10px",cursor:"pointer",
+                  fontSize:"0.78rem",fontWeight:700,letterSpacing:"0.08em",
                   background:addType===t.k?`rgba(${t.k==="in"?"46,213,115":"255,71,87"},0.12)`:"transparent",
                   borderColor:addType===t.k?t.c:"rgba(255,255,255,0.1)",
                   color:addType===t.k?t.c:"rgba(255,255,255,0.3)",
+                  transition:"all .15s",
                 }}>{t.l}</button>
               ))}
             </div>
-            <div style={{ marginBottom:"0.75rem" }}>
-              <label style={lbl}>DESCRI\u00c7\u00c3O</label>
-              <input type="text" placeholder={addType==="in"?"Ex: Poupan\u00e7a semanal...":"Ex: Bilhetes de avi\u00e3o..."}
+
+            <div style={{marginBottom:"1rem"}}>
+              <label style={lbl}>DESCRIÇÃO</label>
+              <input type="text"
+                placeholder={addType==="in"?"Ex: Poupança semanal...":"Ex: Bilhetes de avião..."}
                 value={newEntry.label}
                 onChange={e=>setNewEntry(p=>({...p,label:e.target.value}))}
-                onKeyDown={e=>e.key==="Enter"&&addEntry()} style={inp}/>
+                onKeyDown={e=>e.key==="Enter"&&addEntry()}
+                style={inp} autoFocus/>
             </div>
-            <div style={{ marginBottom:"1rem" }}>
-              <label style={lbl}>VALOR {GBP}</label>
+            <div style={{marginBottom:"1.25rem"}}>
+              <label style={lbl}>VALOR £</label>
               <input type="number" placeholder="0.00"
                 value={newEntry.amount}
                 onChange={e=>setNewEntry(p=>({...p,amount:e.target.value}))}
-                onKeyDown={e=>e.key==="Enter"&&addEntry()} style={inp}/>
+                onKeyDown={e=>e.key==="Enter"&&addEntry()}
+                style={{...inp,fontSize:"1.5rem",fontWeight:600,
+                  color:addType==="in"?"#2ED573":"#FF4757"}}/>
             </div>
-            <div style={{ display:"flex",gap:"0.45rem" }}>
+            <div style={{display:"flex",gap:"0.5rem"}}>
               <button onClick={()=>setShowAdd(false)} style={{
-                flex:1,padding:"0.65rem",background:"rgba(255,255,255,0.04)",
-                border:"1px solid rgba(255,255,255,0.07)",borderRadius:"8px",
-                color:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:"0.72rem",letterSpacing:"0.1em",
+                flex:1,padding:"0.75rem",background:"rgba(255,255,255,0.04)",
+                border:"1px solid rgba(255,255,255,0.07)",borderRadius:"10px",
+                color:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:"0.78rem",letterSpacing:"0.1em",
               }}>CANCELAR</button>
               <button onClick={addEntry} disabled={saving} style={{
-                flex:1,padding:"0.65rem",
+                flex:2,padding:"0.75rem",
                 background:addType==="in"?"#2ED573":"#FF4757",
-                border:"none",borderRadius:"8px",
+                border:"none",borderRadius:"10px",
                 color:addType==="in"?"#080808":"#fff",
-                cursor:"pointer",fontWeight:700,fontSize:"0.72rem",letterSpacing:"0.1em",
-                opacity:saving?0.6:1,
-              }}>{saving?"A GUARDAR...":addType==="in"?"GUARDAR":"REGISTAR"}</button>
+                cursor:"pointer",fontWeight:700,fontSize:"0.88rem",letterSpacing:"0.08em",
+                opacity:saving?0.6:1,transition:"all .15s",
+              }}>{saving?"A GUARDAR...":addType==="in"?"↑ GUARDAR":"↓ REGISTAR GASTO"}</button>
             </div>
           </div>
         </div>
@@ -1160,7 +1190,7 @@ function DateTimePicker({ value, onChange }) {
         }}
           onMouseOver={e=>e.currentTarget.style.background="rgba(46,213,115,0.2)"}
           onMouseOut={e=>e.currentTarget.style.background="rgba(46,213,115,0.1)"}
-        >\u2713 PAID TODAY</button>
+        >✓ PAID TODAY</button>
         <button onClick={()=>setMode("manual")} style={{
           flex:1,padding:"0.6rem 0.5rem",cursor:"pointer",transition:"all .15s",
           background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",
@@ -1204,7 +1234,7 @@ function DateTimePicker({ value, onChange }) {
       <button onClick={()=>{setMode("ask");onChange(null);}} style={{
         background:"none",border:"none",color:"rgba(255,255,255,0.2)",cursor:"pointer",
         fontSize:"0.65rem",letterSpacing:"0.1em",padding:0,
-      }}>\u2190 BACK</button>
+      }}>← BACK</button>
     </div>
   );
 }
@@ -1831,11 +1861,11 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
     display:"block",marginBottom:"0.3rem",textTransform:"uppercase"};
 
   const TABS=[
-    {k:"subs",    l:"\u25a3  DIRECT DEBITS"},
-    {k:"weekly",  l:"\u25eb  WEEKLY"},
-    {k:"expenses",l:"\u25c8  EXPENSES"},
-    {k:"savings", l:"\u25c6  SAVINGS"},
-    {k:"overview",l:"\u25c9  OVERVIEW"},
+    {k:"subs",    l:"▣  DIRECT DEBITS"},
+    {k:"weekly",  l:"◫  WEEKLY"},
+    {k:"expenses",l:"◈  EXPENSES"},
+    {k:"savings", l:"◆  SAVINGS"},
+    {k:"overview",l:"◉  OVERVIEW"},
   ];
 
   return (
@@ -2118,8 +2148,8 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
           background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
           borderRadius:"10px",padding:3}}>
           {[
-            {k:"mine",    l:"\u25cf  "+myName.split(" ")[0].toUpperCase()},
-            {k:"hers",    l:"\u25cf  "+herName.split(" ")[0].toUpperCase()},
+            {k:"mine",    l:"●  "+myName.split(" ")[0].toUpperCase()},
+            {k:"hers",    l:"●  "+herName.split(" ")[0].toUpperCase()},
             {k:"together",l:"♥  JUNTOS"},
           ].map(t=>(
             <button key={t.k} onClick={()=>setTopTab(t.k)} style={{
@@ -2202,7 +2232,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                         padding:"0.3rem 0.6rem",cursor:"pointer",fontSize:"0.68rem",fontWeight:700,
                         letterSpacing:"0.08em",animation:paidAnim[sub.id]?"paidPop .9s ease":"none",
                         transition:"all .16s",whiteSpace:"nowrap",
-                      }}>{paidAnim[sub.id]?"\u2713 PAID":"PAID"}</button>
+                      }}>{paidAnim[sub.id]?"✓ PAID":"PAID"}</button>
                       <button onClick={()=>setHistId(sub.id)} style={{
                         background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",
                         borderRadius:"7px",color:"rgba(255,255,255,0.3)",
@@ -2260,7 +2290,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                       borderRadius:"0 2px 2px 0",background:"#FF4757"}}/>
                     <div style={{width:38,height:38,borderRadius:"8px",background:"rgba(255,71,87,.06)",
                       border:"1px solid rgba(255,71,87,.12)",display:"flex",alignItems:"center",
-                      justifyContent:"center",fontSize:"1rem",flexShrink:0,color:"#FF4757"}}>\u25c8</div>
+                      justifyContent:"center",fontSize:"1rem",flexShrink:0,color:"#FF4757"}}>◈</div>
                     <div style={{flex:1}}>
                       <div style={{fontWeight:500,fontSize:"0.88rem"}}>{exp.label}</div>
                       {(exp.paid_date||exp.date)&&(
@@ -2345,7 +2375,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
             >
               <span>🤖</span>
               AI ANALYSIS · OPTIMISE FINANCES
-              <span style={{color:"rgba(232,255,71,0.35)",animation:"blink 2.5s ease infinite"}}>\u25c6</span>
+              <span style={{color:"rgba(232,255,71,0.35)",animation:"blink 2.5s ease infinite"}}>◆</span>
             </button>
           </div>
         )}
