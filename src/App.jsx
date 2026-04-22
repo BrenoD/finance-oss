@@ -141,27 +141,38 @@ const LS = {
 const coupleApi = {
   makeCode: () => Math.random().toString(36).slice(2,10).toUpperCase(),
   async getOrCreate(userId) {
-    if (!DB_READY) return null;
+    console.log("[getOrCreate] userId:", userId);
+    if (!DB_READY) { console.warn("[getOrCreate] DB not ready"); return null; }
     try {
       const asOwner = await sb.select("couples",`owner_id=eq.${userId}`);
+      console.log("[getOrCreate] asOwner:", JSON.stringify(asOwner));
       if (asOwner.length>0) return asOwner[0];
       const asPartner = await sb.select("couples",`partner_id=eq.${userId}`);
+      console.log("[getOrCreate] asPartner:", JSON.stringify(asPartner));
       if (asPartner.length>0) return asPartner[0];
-      const [row] = await sb.insert("couples",{owner_id:userId,invite_code:coupleApi.makeCode()});
+      const code = coupleApi.makeCode();
+      console.log("[getOrCreate] Creating new couple with code:", code);
+      const [row] = await sb.insert("couples",{owner_id:userId,invite_code:code});
+      console.log("[getOrCreate] Created couple:", JSON.stringify(row));
       return row;
-    } catch(e){console.error(e);return null;}
+    } catch(e){console.error("[getOrCreate] Exception:", e.message);return null;}
   },
   async joinByCode(code,userId,userName) {
-    if (!DB_READY) return {error:"DB not configured"};
+    console.log("[joinByCode] code:", code, "userId:", userId, "userName:", userName);
+    if (!DB_READY) { console.warn("[joinByCode] DB not ready"); return {error:"DB not configured"}; }
     try {
       const rows = await sb.select("couples",`invite_code=eq.${code}`);
-      if (rows.length===0) return {error:"Invalid invite code"};
+      console.log("[joinByCode] couples found:", rows.length, JSON.stringify(rows));
+      if (rows.length===0) { console.error("[joinByCode] No couple found with code:", code); return {error:"Invalid invite code"}; }
       const couple=rows[0];
-      if (couple.owner_id===userId) return {already:true,couple};
-      if (couple.partner_id) return {already:true,couple};
+      console.log("[joinByCode] couple:", JSON.stringify(couple));
+      if (couple.owner_id===userId) { console.log("[joinByCode] User is owner, skipping join"); return {already:true,couple}; }
+      if (couple.partner_id) { console.log("[joinByCode] Already has partner:", couple.partner_id); return {already:true,couple}; }
+      console.log("[joinByCode] Updating couple with partner_id:", userId);
       await sb.update("couples",couple.id,{partner_id:userId,partner_name:userName});
+      console.log("[joinByCode] SUCCESS - couple updated!");
       return {success:true,couple:{...couple,partner_id:userId,partner_name:userName}};
-    } catch(e){return {error:e.message};}
+    } catch(e){ console.error("[joinByCode] Exception:", e.message); return {error:e.message}; }
   },
   async getCouple(userId) {
     if (!DB_READY) return null;
@@ -241,6 +252,42 @@ const weekLabel = (key) => {
 
 const ACCENTS = ["#E8FF47","#FF4757","#2ED573","#1E90FF","#FF6B81","#ECF0F1","#FFA502","#A29BFE"];
 
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  JOINED BANNER — shown when user joined via invite link
+// ─────────────────────────────────────────────────────────────────────────────
+function JoinedBanner({ ownerName, onClose }) {
+  return (
+    <div style={{
+      position:"fixed",top:0,left:0,right:0,zIndex:1100,
+      background:"linear-gradient(135deg,rgba(255,105,180,0.95),rgba(255,71,87,0.95))",
+      padding:"1rem 1.5rem",
+      display:"flex",alignItems:"center",justifyContent:"space-between",
+      backdropFilter:"blur(10px)",
+      boxShadow:"0 4px 24px rgba(255,105,180,0.3)",
+      animation:"fadeUp .4s ease both",
+    }}>
+      <div style={{display:"flex",alignItems:"center",gap:"0.875rem"}}>
+        <div style={{fontSize:"1.5rem"}}>♥</div>
+        <div>
+          <div style={{fontWeight:700,fontSize:"0.9rem",color:"#fff",letterSpacing:"0.02em"}}>
+            Ligado com sucesso!
+          </div>
+          <div style={{color:"rgba(255,255,255,0.85)",fontSize:"0.75rem",marginTop:2}}>
+            Agora consegues ver as finanças de {ownerName} na aba <strong>Juntos</strong>. Tudo o que adicionares aparecerá também lá.
+          </div>
+        </div>
+      </div>
+      <button onClick={onClose} style={{
+        background:"rgba(255,255,255,0.2)",border:"1px solid rgba(255,255,255,0.3)",
+        borderRadius:"8px",color:"#fff",cursor:"pointer",
+        padding:"0.35rem 0.75rem",fontSize:"0.72rem",fontWeight:600,letterSpacing:"0.08em",
+        flexShrink:0,marginLeft:"1rem",
+      }}>OK</button>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  LOGIN SCREEN
@@ -1206,7 +1253,7 @@ function WeeklyTab({subs,expenses,income,user}) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
-function FinanceApp({ user, onSignOut }) {
+function FinanceApp({ user, onSignOut, joinedCouple }) {
   const [subs,setSubs]           = useState([]);
   const [expenses,setExpenses]   = useState([]);
   const [income,setIncome]       = useState(600);
@@ -1459,6 +1506,14 @@ function FinanceApp({ user, onSignOut }) {
         )}
 
         {!loading&&(<>
+
+        {/* ── JOINED BANNER ──────────────────────────────────────────────── */}
+        {joinedCouple && (
+          <JoinedBanner
+            ownerName={joinedCouple.owner_name || "o teu companheiro"}
+            onClose={() => {/* banner auto-hides, user just reads it */}}
+          />
+        )}
 
         {/* ── USER BAR ────────────────────────────────────────────────────── */}
         <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",
@@ -2068,47 +2123,77 @@ function FinanceApp({ user, onSignOut }) {
 export default function App() {
   const [user,    setUser]    = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [joinedCouple, setJoinedCouple] = useState(null); // set when user joins via invite link
 
   useEffect(()=>{
     (async()=>{
-      // 1. Check if we just came back from OAuth / magic link redirect
+      console.log("[AUTH] Starting auth flow...");
+
       // Check for invite code in URL
       const urlParams = new URLSearchParams(window.location.search);
       const inviteCode = urlParams.get("invite");
-      if (inviteCode) LS.set("pending_invite", inviteCode);
+      console.log("[INVITE] Code from URL:", inviteCode || "none");
+      if (inviteCode) {
+        LS.set("pending_invite", inviteCode);
+        console.log("[INVITE] Saved to localStorage:", inviteCode);
+      }
 
+      // Check OAuth / magic link hash
       const token = await auth.getSessionFromHash();
+      console.log("[AUTH] Token from hash:", token ? "found" : "none");
+
       if (token) {
         const u = await auth.getUser();
+        console.log("[AUTH] User from hash token:", u?.email || "null");
         if (u) {
-          // Join couple if came via invite
           const inv = LS.get("pending_invite", null);
+          console.log("[INVITE] Pending invite after login:", inv || "none");
           if (inv) {
             const uname = u.user_metadata?.full_name||u.email?.split("@")[0]||"Partner";
-            await coupleApi.joinByCode(inv, u.id, uname);
+            console.log("[INVITE] Attempting to join couple with code:", inv, "as:", uname);
+            const result = await coupleApi.joinByCode(inv, u.id, uname);
+            console.log("[INVITE] joinByCode result:", JSON.stringify(result));
+            if (result?.success || result?.already) {
+              console.log("[INVITE] Successfully joined/already in couple!");
+              setJoinedCouple(result.couple);
+            } else if (result?.error) {
+              console.error("[INVITE] Error joining couple:", result.error);
+            }
             LS.set("pending_invite", null);
             window.history.replaceState({}, document.title, window.location.pathname);
           }
           setUser(u); setAuthLoading(false); return;
         }
       }
-      // 2. Check existing stored session
+
       if (!DB_READY) {
-        // No DB — auto-login locally
         setUser({email:"local@demo",id:"local"});
         setAuthLoading(false);
         return;
       }
+
       const u = await auth.getUser().catch(()=>null);
+      console.log("[AUTH] Existing session user:", u?.email || "none");
+
       if (u) {
         const inv = LS.get("pending_invite", null);
+        console.log("[INVITE] Pending invite for existing session:", inv || "none");
         if (inv) {
           const uname = u.user_metadata?.full_name||u.email?.split("@")[0]||"Partner";
-          await coupleApi.joinByCode(inv, u.id, uname);
+          console.log("[INVITE] Attempting to join couple with code:", inv, "as:", uname);
+          const result = await coupleApi.joinByCode(inv, u.id, uname);
+          console.log("[INVITE] joinByCode result:", JSON.stringify(result));
+          if (result?.success || result?.already) {
+            console.log("[INVITE] Successfully joined/already in couple!");
+            setJoinedCouple(result.couple);
+          } else if (result?.error) {
+            console.error("[INVITE] Error joining couple:", result.error);
+          }
           LS.set("pending_invite", null);
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       }
+
       setUser(u || null);
       setAuthLoading(false);
     })();
@@ -2136,5 +2221,5 @@ export default function App() {
 
   if (!user) return <LoginScreen onLogin={setUser}/>;
 
-  return <FinanceApp user={user} onSignOut={handleSignOut}/>;
+  return <FinanceApp user={user} onSignOut={handleSignOut} joinedCouple={joinedCouple}/>;
 }
