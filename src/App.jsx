@@ -1486,9 +1486,16 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
   const myName     = user?.user_metadata?.full_name||user?.email?.split("@")[0]||"Me";
   const herName    = couple?.partner_name||partnerName||"Partner";
   const totalSubs  = subs.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const herTotalSubs = herSubs.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const herTotalExp  = herExpenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
+  const combinedSubs = couple?.partner_id ? totalSubs + herTotalSubs : totalSubs;
+  const combinedExp  = couple?.partner_id ? totalExp + herTotalExp  : totalExp;
   const totalExp   = expenses.reduce((s,x)=>s+parseFloat(x.amount||0),0);
-  const totalOut   = totalSubs+totalExp;
-  const totalIncome = income + (partnerEnabled ? partnerIncome : 0);
+  const totalOut   = couple?.partner_id ? combinedSubs + combinedExp : totalSubs+totalExp;
+  // Use real partner data from DB when couple is connected, fallback to manual
+  const effectivePartnerIncome = couple?.partner_id ? herIncome : partnerIncome;
+  const effectivePartnerEnabled = couple?.partner_id ? true : partnerEnabled;
+  const totalIncome = income + (effectivePartnerEnabled ? effectivePartnerIncome : 0);
   const balance    = totalIncome-totalOut;
   const pct        = totalIncome>0?Math.min((totalOut/totalIncome)*100,100).toFixed(0):0;
 
@@ -1688,7 +1695,16 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                   )}
                 </div>
 
-                {partnerEnabled?(
+                {couple?.partner_id ? (
+                  // Couple connected — show her real income from DB (read-only)
+                  <div style={{display:"flex",alignItems:"baseline",gap:3}}>
+                    <span style={{color:"rgba(255,105,180,0.4)",fontFamily:"'DM Mono',monospace",fontSize:"0.9rem"}}>{GBP}</span>
+                    <span style={{fontSize:"1.6rem",fontWeight:600,letterSpacing:"-0.02em",fontFamily:"'DM Mono',monospace",color:"#FF69B4"}}>
+                      {herIncome.toFixed(2)}
+                    </span>
+                    <span style={{color:"rgba(255,105,180,0.3)",fontSize:"0.6rem",marginLeft:6,letterSpacing:"0.08em"}}>AUTO</span>
+                  </div>
+                ) : partnerEnabled?(
                   editPartner?(
                     <div style={{display:"flex",alignItems:"center",gap:3}}>
                       <span style={{color:"rgba(255,105,180,0.5)",fontFamily:"'DM Mono',monospace",fontSize:"0.9rem"}}>{GBP}</span>
@@ -1734,7 +1750,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
             </div>
 
             {/* combined income row */}
-            {partnerEnabled&&(
+            {(partnerEnabled||couple?.partner_id)&&(
               <div style={{marginTop:"0.875rem",padding:"0.6rem 0.875rem",
                 background:"rgba(255,105,180,0.04)",border:"1px solid rgba(255,105,180,0.12)",
                 borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1744,7 +1760,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"1rem"}}>
                   <span style={{color:"rgba(255,255,255,0.2)",fontSize:"0.65rem",fontFamily:"'DM Mono',monospace"}}>
-                    {fmt(income)} + {fmt(partnerIncome)}
+                    {fmt(income)} + {fmt(effectivePartnerIncome)}
                   </span>
                   <span style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1rem",color:"#FF69B4"}}>
                     {fmt(totalIncome)}
@@ -1946,8 +1962,8 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
             <div style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
               borderRadius:"14px",padding:"1.25rem 1.5rem",marginBottom:"0.875rem"}}>
               {[
-                {l:"SUBSCRIPTIONS", v:totalSubs, c:"#A29BFE"},
-                {l:"EXPENSES",      v:totalExp,  c:"#FF4757"},
+                {l:"SUBSCRIPTIONS", v:couple?.partner_id?combinedSubs:totalSubs, c:"#A29BFE"},
+                {l:"EXPENSES",      v:couple?.partner_id?combinedExp:totalExp,  c:"#FF4757"},
                 {l:"FREE BALANCE",  v:Math.max(balance,0), c:"#E8FF47"},
               ].map(item=>(
                 <div key={item.l} style={{marginBottom:"0.875rem"}}>
