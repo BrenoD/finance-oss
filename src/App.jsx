@@ -205,7 +205,7 @@ const coupleApi = {
 // ─────────────────────────────────────────────────────────────────────────────
 //  HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-const GBP   = "\u00a3";
+const GBP   = "£";
 const fmt   = (v) => GBP + parseFloat(v||0).toFixed(2);
 const nowDate = () => new Date().toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
 const nowTime = () => new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
@@ -253,7 +253,7 @@ const weekLabel = (key) => {
   mon.setUTCDate(jan4.getUTCDate() - (jan4.getUTCDay()||7) + 1 + (parseInt(w)-1)*7);
   const sun  = new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
   const f    = (d) => d.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
-  return `${f(mon)} \u2013 ${f(sun)}`;
+  return `${f(mon)} – ${f(sun)}`;
 };
 
 const ACCENTS = ["#E8FF47","#FF4757","#2ED573","#1E90FF","#FF6B81","#ECF0F1","#FFA502","#A29BFE"];
@@ -947,10 +947,10 @@ function AIModal({onClose,subscriptions,expenses,weeklyIncome}) {
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,
         messages:[{role:"user",content:`Personal finance consultant. Reply in English, be direct.
-Weekly income: \u00a3${weeklyIncome.toFixed(2)} / \u00a3${(weeklyIncome*4).toFixed(2)} monthly (combined household)
-Subscriptions (\u00a3${totalSubs.toFixed(2)}): ${subscriptions.map(s=>`${s.title}: \u00a3${s.amount}`).join(", ")}
-Expenses (\u00a3${totalExp.toFixed(2)}): ${expenses.map(e=>`${e.label}: \u00a3${e.amount}`).join(", ")}
-Weekly balance: \u00a3${balance.toFixed(2)}
+Weekly income: £${weeklyIncome.toFixed(2)} / £${(weeklyIncome*4).toFixed(2)} monthly (combined household)
+Subscriptions (£${totalSubs.toFixed(2)}): ${subscriptions.map(s=>`${s.title}: £${s.amount}`).join(", ")}
+Expenses (£${totalExp.toFixed(2)}): ${expenses.map(e=>`${e.label}: £${e.amount}`).join(", ")}
+Weekly balance: £${balance.toFixed(2)}
 1) Spending % breakdown 2) What to cut 3) Savings plan 4) 3/6/12 month projection 5) 3 tips. Emojis, real numbers. Max 300 words.`}]})
     }).then(r=>r.json()).then(d=>{
       if(d.content?.[0]?.text) setAdvice(d.content[0].text);
@@ -1229,7 +1229,7 @@ function WeeklyTab({subs,expenses,income,user}) {
             <DateTimePicker value={entryPayDate} onChange={setEntryPayDate}/>
             {[
               {l:"DESCRIPTION",k:"label",p:"Groceries, Transport...",t:"text"},
-              {l:"AMOUNT \u00a3",k:"amount",p:"0.00",t:"number"},
+              {l:"AMOUNT £",k:"amount",p:"0.00",t:"number"},
               {l:"NOTE (optional)",k:"note",p:"e.g. Tesco, Oyster...",t:"text"},
             ].map(f=>(
               <div key={f.k} style={{marginBottom:"0.75rem"}}>
@@ -1319,29 +1319,41 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
           if(peName.length>0) setPartnerName(peName[0].value);
           if(peVal.length>0)  setPartnerIncome(parseFloat(peVal[0].value)||0);
           if(peEnabled.length>0) setPartnerEnabled(peEnabled[0].value==="true");
+          // Always get fresh couple data (not cached)
           const c = await coupleApi.getOrCreate(user.id);
-          setCouple(c);
-          console.log("[LOAD] couple:", JSON.stringify(c));
+          // Re-fetch to get latest partner_id in case she just joined
+          const freshCouple = await coupleApi.getCouple(user.id);
+          const cFinal = freshCouple || c;
+          setCouple(cFinal);
+          console.log("[LOAD] couple (fresh):", JSON.stringify(cFinal));
 
           // Load partner data if couple has a partner
-          const partnerId = c?.owner_id === user.id ? c?.partner_id : c?.owner_id;
-          console.log("[LOAD] partnerId:", partnerId);
+          const partnerId = cFinal?.owner_id === user.id ? cFinal?.partner_id : cFinal?.owner_id;
+          console.log("[LOAD] couple owner_id:", cFinal?.owner_id, "current user.id:", user.id, "=> partnerId:", partnerId);
           if (partnerId) {
+            console.log("[LOAD] Loading partner data for:", partnerId);
             try {
               const [herSubsRows, herExpRows, herSettings] = await Promise.all([
                 sb.select("subscriptions", `user_id=eq.${partnerId}&order=created_at.asc`),
                 sb.select("expenses", `user_id=eq.${partnerId}&order=created_at.asc`),
                 sb.select("settings", `user_id=eq.${partnerId}&key=eq.income`),
               ]);
-              console.log("[LOAD] her subs:", herSubsRows.length, "her expenses:", herExpRows.length);
+              console.log("[LOAD] her subs:", herSubsRows.length, "her expenses:", herExpRows.length, "her settings:", herSettings);
               const herPayments = await sb.select("sub_payments", `user_id=eq.${partnerId}&order=created_at.desc`);
               setHerSubs(herSubsRows.map(s=>({
                 ...s, ci: s.ci ?? 0, logoErr: s.logo_err ?? false,
                 history: herPayments.filter(p=>p.sub_id===s.id).map(p=>({date:p.paid_date,time:p.paid_time})),
               })));
               setHerExpenses(herExpRows);
-              if (herSettings.length > 0) setHerIncome(parseFloat(herSettings[0].value)||0);
-            } catch(e) { console.error("[LOAD] Error loading partner data:", e); }
+              if (herSettings.length > 0) {
+                setHerIncome(parseFloat(herSettings[0].value)||0);
+                console.log("[LOAD] her income:", herSettings[0].value);
+              } else {
+                console.log("[LOAD] no income setting found for partner");
+              }
+            } catch(e) { console.error("[LOAD] Error loading partner data:", e.message); }
+          } else {
+            console.log("[LOAD] No partner yet - partner_id is:", partnerId);
           }
         } else {
           setSubs(LS.get("fm_subs",[
@@ -1630,7 +1642,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                     <span style={{fontSize:"2.1rem",fontWeight:600,letterSpacing:"-0.02em",fontFamily:"'DM Mono',monospace"}}>
                       {income.toFixed(2)}
                     </span>
-                    <span style={{color:"rgba(255,255,255,0.12)",fontSize:"0.72rem",marginLeft:4}}>\u270e</span>
+                    <span style={{color:"rgba(255,255,255,0.12)",fontSize:"0.72rem",marginLeft:4}}>✎</span>
                   </div>
                 )}
               </div>
@@ -1695,7 +1707,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                       <span style={{fontSize:"1.6rem",fontWeight:600,letterSpacing:"-0.02em",fontFamily:"'DM Mono',monospace",color:"#FF69B4"}}>
                         {partnerIncome.toFixed(2)}
                       </span>
-                      <span style={{color:"rgba(255,105,180,0.2)",fontSize:"0.72rem",marginLeft:4}}>\u270e</span>
+                      <span style={{color:"rgba(255,105,180,0.2)",fontSize:"0.72rem",marginLeft:4}}>✎</span>
                     </div>
                   )
                 ):(
@@ -1727,7 +1739,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 background:"rgba(255,105,180,0.04)",border:"1px solid rgba(255,105,180,0.12)",
                 borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"0.5rem"}}>
-                  <span style={{fontSize:"0.85rem"}}>\u2665</span>
+                  <span style={{fontSize:"0.85rem"}}>♥</span>
                   <span style={{color:"rgba(255,255,255,0.3)",fontSize:"0.62rem",letterSpacing:"0.12em"}}>COMBINED WEEKLY</span>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:"1rem"}}>
@@ -1766,7 +1778,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
           {[
             {k:"mine",    l:"\u25cf  "+myName.split(" ")[0].toUpperCase()},
             {k:"hers",    l:"\u25cf  "+herName.split(" ")[0].toUpperCase()},
-            {k:"together",l:"\u2665  JUNTOS"},
+            {k:"together",l:"♥  JUNTOS"},
           ].map(t=>(
             <button key={t.k} onClick={()=>setTopTab(t.k)} style={{
               flex:1,padding:"0.5rem 0.25rem",border:"none",borderRadius:"7px",cursor:"pointer",
@@ -2109,7 +2121,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:17,padding:0}}>×</button>
             </div>
             <DateTimePicker value={subPayDate} onChange={setSubPayDate}/>
-            {[{l:"SERVICE",k:"title",p:"Netflix, Spotify...",t:"text"},{l:"AMOUNT \u00a3",k:"amount",p:"9.99",t:"number"}].map(f=>(
+            {[{l:"SERVICE",k:"title",p:"Netflix, Spotify...",t:"text"},{l:"AMOUNT £",k:"amount",p:"9.99",t:"number"}].map(f=>(
               <div key={f.k} style={{marginBottom:"0.75rem"}}>
                 <label style={lbl}>{f.l}</label>
                 <input type={f.t} placeholder={f.p} value={newSub[f.k]}
@@ -2152,7 +2164,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
                 color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:17,padding:0}}>×</button>
             </div>
             <DateTimePicker value={expPayDate} onChange={setExpPayDate}/>
-            {[{l:"DESCRIPTION",k:"label",p:"Groceries, Transport...",t:"text"},{l:"WEEKLY AMOUNT \u00a3",k:"amount",p:"50.00",t:"number"}].map(f=>(
+            {[{l:"DESCRIPTION",k:"label",p:"Groceries, Transport...",t:"text"},{l:"WEEKLY AMOUNT £",k:"amount",p:"50.00",t:"number"}].map(f=>(
               <div key={f.k} style={{marginBottom:"0.75rem"}}>
                 <label style={lbl}>{f.l}</label>
                 <input type={f.t} placeholder={f.p} value={newExp[f.k]}
