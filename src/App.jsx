@@ -97,12 +97,18 @@ const sb = {
     const r = await fetch(this.url(table,`id=eq.${id}`), { method:"PATCH", headers:this.h(), body:JSON.stringify(body) });
     if (!r.ok) throw new Error(await r.text()); return r.json();
   },
-  async upsert(table, body) {
-    const r = await fetch(this.url(table), {
+  async upsert(table, body, onConflict="") {
+    const qs = onConflict ? `on_conflict=${onConflict}` : "";
+    const r = await fetch(this.url(table, qs), {
       method:"POST", body:JSON.stringify(body),
       headers: { ...this.h(), "Prefer":"return=representation,resolution=merge-duplicates" },
     });
-    if (!r.ok) throw new Error(await r.text()); return r.json();
+    if (!r.ok) {
+      const txt = await r.text();
+      console.error("[upsert] Error on", table, ":", txt);
+      throw new Error(txt);
+    }
+    return r.json();
   },
   async delete(table, id) {
     const r = await fetch(this.url(table,`id=eq.${id}`), { method:"DELETE", headers:this.h() });
@@ -1273,6 +1279,10 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
   const [savingInc,setSavingInc]           = useState(false);
   const [couple,setCouple]                 = useState(null);
   const [showInvite,setShowInvite]         = useState(false);
+  // Partner data
+  const [herSubs,setHerSubs]               = useState([]);
+  const [herExpenses,setHerExpenses]       = useState([]);
+  const [herIncome,setHerIncome]           = useState(0);
   const [partnerEnabled,setPartnerEnabled] = useState(()=>LS.get("fm_partnerEnabled",false));
   const [partnerName,setPartnerName]       = useState(()=>LS.get("fm_partnerName","Fiancée"));
   const [partnerIncome,setPartnerIncome]   = useState(()=>LS.get("fm_partnerIncome",0));
@@ -1311,6 +1321,28 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
           if(peEnabled.length>0) setPartnerEnabled(peEnabled[0].value==="true");
           const c = await coupleApi.getOrCreate(user.id);
           setCouple(c);
+          console.log("[LOAD] couple:", JSON.stringify(c));
+
+          // Load partner data if couple has a partner
+          const partnerId = c?.owner_id === user.id ? c?.partner_id : c?.owner_id;
+          console.log("[LOAD] partnerId:", partnerId);
+          if (partnerId) {
+            try {
+              const [herSubsRows, herExpRows, herSettings] = await Promise.all([
+                sb.select("subscriptions", `user_id=eq.${partnerId}&order=created_at.asc`),
+                sb.select("expenses", `user_id=eq.${partnerId}&order=created_at.asc`),
+                sb.select("settings", `user_id=eq.${partnerId}&key=eq.income`),
+              ]);
+              console.log("[LOAD] her subs:", herSubsRows.length, "her expenses:", herExpRows.length);
+              const herPayments = await sb.select("sub_payments", `user_id=eq.${partnerId}&order=created_at.desc`);
+              setHerSubs(herSubsRows.map(s=>({
+                ...s, ci: s.ci ?? 0, logoErr: s.logo_err ?? false,
+                history: herPayments.filter(p=>p.sub_id===s.id).map(p=>({date:p.paid_date,time:p.paid_time})),
+              })));
+              setHerExpenses(herExpRows);
+              if (herSettings.length > 0) setHerIncome(parseFloat(herSettings[0].value)||0);
+            } catch(e) { console.error("[LOAD] Error loading partner data:", e); }
+          }
         } else {
           setSubs(LS.get("fm_subs",[
             {id:1,title:"Netflix",amount:"17.99",ci:0,history:[],logoErr:false},
@@ -1332,7 +1364,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
     setSavingInc(true);
     try {
       if (DB_READY) {
-        await sb.upsert("settings",{user_id:user.id,key:"income",value:String(val)});
+        await sb.upsert("settings",{user_id:user.id,key:"income",value:String(val)},"user_id,key");
       } else {
         LS.set("fm_income",val);
       }
@@ -1348,9 +1380,9 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
     LS.set("fm_partnerName", name);
     LS.set("fm_partnerIncome", val);
     if (DB_READY) {
-      sb.upsert("settings",{user_id:user.id,key:"partnerEnabled",value:String(enabled)}).catch(()=>{});
-      sb.upsert("settings",{user_id:user.id,key:"partnerName",value:name}).catch(()=>{});
-      sb.upsert("settings",{user_id:user.id,key:"partnerIncome",value:String(val)}).catch(()=>{});
+      sb.upsert("settings",{user_id:user.id,key:"partnerEnabled",value:String(enabled)},"user_id,key").catch(()=>{});
+      sb.upsert("settings",{user_id:user.id,key:"partnerName",value:name},"user_id,key").catch(()=>{});
+      sb.upsert("settings",{user_id:user.id,key:"partnerIncome",value:String(val)},"user_id,key").catch(()=>{});
     }
   };
 
@@ -1964,16 +1996,98 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
 
         {/* HERS TAB */}
         {topTab==="hers"&&(
-          <div style={{animation:"fadeUp .32s ease both",textAlign:"center",padding:"3.5rem 0"}}>
-            <div style={{fontSize:"2.5rem",marginBottom:"1rem"}}>♥</div>
-            <div style={{fontWeight:600,fontSize:"0.95rem",marginBottom:"0.5rem",color:"#FF69B4"}}>
-              {herName.split(" ")[0]}'s View
-            </div>
-            <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.78rem",lineHeight:1.7,maxWidth:320,margin:"0 auto"}}>
-              {couple?.partner_id
-                ? `${herName.split(" ")[0]} manages her own finances on her device. Check the Juntos tab to see all shared activity.`
-                : "Invite your partner first. Use the ♥ Invite button above to generate a link."}
-            </div>
+          <div style={{animation:"fadeUp .32s ease both"}}>
+            {!couple?.partner_id ? (
+              <div style={{textAlign:"center",padding:"3.5rem 0"}}>
+                <div style={{fontSize:"2.5rem",marginBottom:"1rem"}}>♥</div>
+                <div style={{fontWeight:600,fontSize:"0.95rem",marginBottom:"0.5rem",color:"#FF69B4"}}>
+                  Sem parceiro ainda
+                </div>
+                <div style={{color:"rgba(255,255,255,0.3)",fontSize:"0.78rem",lineHeight:1.7,maxWidth:320,margin:"0 auto"}}>
+                  Usa o botão ♥ INVITE para gerar um link e enviar à tua companheira.
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Her income card */}
+                <div style={{background:"#0c0c0c",border:"1px solid rgba(255,105,180,0.15)",
+                  borderRadius:"14px",padding:"1.1rem 1.5rem",marginBottom:"1rem",position:"relative",overflow:"hidden"}}>
+                  <div style={{position:"absolute",top:0,left:0,right:0,height:1.5,
+                    background:"linear-gradient(90deg,transparent,rgba(255,105,180,0.5),transparent)"}}/>
+                  <div style={{color:"rgba(255,105,180,0.5)",fontSize:"0.6rem",letterSpacing:"0.2em",marginBottom:"0.3rem"}}>
+                    {herName.split(" ")[0].toUpperCase()} · WEEKLY INCOME
+                  </div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1.8rem",color:"#FF69B4"}}>
+                    {fmt(herIncome)}
+                  </div>
+                </div>
+
+                {/* Her subs */}
+                <div style={{marginBottom:"0.5rem",color:"rgba(255,255,255,0.18)",fontSize:"0.6rem",letterSpacing:"0.15em",fontFamily:"'DM Mono',monospace"}}>
+                  {herSubs.length} SUBSCRIPTIONS · {fmt(herSubs.reduce((s,x)=>s+parseFloat(x.amount||0),0))}/WK
+                </div>
+                <div style={{display:"grid",gap:"0.5rem",marginBottom:"1rem"}}>
+                  {herSubs.length===0 ? (
+                    <div style={{textAlign:"center",padding:"1.5rem",color:"rgba(255,255,255,0.1)",fontSize:"0.7rem",letterSpacing:"0.12em"}}>
+                      SEM SUBSCRIÇÕES
+                    </div>
+                  ) : herSubs.map((sub,i)=>(
+                    <div key={sub.id} style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
+                      borderRadius:"12px",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",
+                      position:"relative",overflow:"hidden"}}>
+                      <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
+                        borderRadius:"0 2px 2px 0",background:"#FF69B4"}}/>
+                      <div style={{width:36,height:36,borderRadius:"8px",flexShrink:0,overflow:"hidden",
+                        background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.055)",
+                        display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        {!sub.logoErr ? (
+                          <img src={getLogoUrl(sub.title)} alt={sub.title}
+                            style={{width:"100%",height:"100%",objectFit:"contain",padding:4}}
+                            onError={()=>setHerSubs(p=>p.map(s=>s.id===sub.id?{...s,logoErr:true}:s))}/>
+                        ) : (
+                          <span style={{fontWeight:700,fontSize:"0.78rem",color:"#FF69B4"}}>{getInitials(sub.title)}</span>
+                        )}
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:500,fontSize:"0.85rem"}}>{sub.title}</div>
+                        <div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>
+                          {sub.history?.length>0?`${sub.history[0].date} · ${sub.history[0].time}`:"—"}
+                        </div>
+                      </div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.88rem",color:"#FF69B4"}}>
+                        {fmt(sub.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Her expenses */}
+                <div style={{marginBottom:"0.5rem",color:"rgba(255,255,255,0.18)",fontSize:"0.6rem",letterSpacing:"0.15em",fontFamily:"'DM Mono',monospace"}}>
+                  {herExpenses.length} EXPENSES · {fmt(herExpenses.reduce((s,x)=>s+parseFloat(x.amount||0),0))}/WK
+                </div>
+                <div style={{display:"grid",gap:"0.5rem"}}>
+                  {herExpenses.length===0 ? (
+                    <div style={{textAlign:"center",padding:"1.5rem",color:"rgba(255,255,255,0.1)",fontSize:"0.7rem",letterSpacing:"0.12em"}}>
+                      SEM GASTOS
+                    </div>
+                  ) : herExpenses.map((exp,i)=>(
+                    <div key={exp.id} style={{background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
+                      borderRadius:"12px",padding:"0.75rem 1rem",display:"flex",alignItems:"center",gap:"0.75rem",
+                      position:"relative",overflow:"hidden"}}>
+                      <div style={{position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
+                        borderRadius:"0 2px 2px 0",background:"#FF4757"}}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:500,fontSize:"0.85rem"}}>{exp.label}</div>
+                        {exp.paid_date&&<div style={{color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",fontFamily:"'DM Mono',monospace",marginTop:2}}>{exp.paid_date}</div>}
+                      </div>
+                      <div style={{fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.88rem",color:"#FF4757"}}>
+                        {fmt(exp.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
