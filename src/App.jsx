@@ -295,6 +295,331 @@ function JoinedBanner({ ownerName, onClose }) {
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SAVINGS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function SavingsTab({ user, couple }) {
+  const [entries, setEntries]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [showAdd, setShowAdd]       = useState(false);
+  const [addType, setAddType]       = useState("in"); // "in" | "out"
+  const [newEntry, setNewEntry]     = useState({ label: "", amount: "" });
+  const [saving, setSaving]         = useState(false);
+  const [projection, setProjection] = useState(4);
+
+  const GBP = "\u00a3";
+  const fmt = (v) => GBP + parseFloat(v||0).toFixed(2);
+
+  // Load from Supabase
+  const load = async () => {
+    setLoading(true);
+    try {
+      if (DB_READY && user?.id) {
+        const rows = await sb.select("savings_entries", `user_id=eq.${user.id}&order=created_at.desc`);
+        setEntries(rows);
+      } else {
+        setEntries(LS.get("fm_savings", []));
+      }
+    } catch(e) { console.error("[SAVINGS] load error:", e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const addEntry = async () => {
+    if (!newEntry.label || !newEntry.amount) return;
+    setSaving(true);
+    const payload = {
+      user_id: user?.id,
+      type: addType,
+      label: newEntry.label,
+      amount: parseFloat(newEntry.amount),
+      created_at: new Date().toISOString(),
+    };
+    try {
+      if (DB_READY && user?.id) {
+        const [row] = await sb.insert("savings_entries", payload);
+        setEntries(p => [row, ...p]);
+        // Log to activity feed
+        const uname = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+        coupleApi.log(couple?.id, user?.id, uname,
+          addType === "in" ? "savings_in" : "savings_out",
+          newEntry.label, parseFloat(newEntry.amount));
+      } else {
+        const row = { ...payload, id: Date.now() };
+        const updated = [row, ...entries];
+        setEntries(updated);
+        LS.set("fm_savings", updated);
+      }
+    } catch(e) { console.error("[SAVINGS] add error:", e); }
+    setNewEntry({ label: "", amount: "" });
+    setShowAdd(false);
+    setSaving(false);
+  };
+
+  const removeEntry = async (id) => {
+    try {
+      if (DB_READY) await sb.delete("savings_entries", id);
+      else {
+        const updated = entries.filter(e => e.id !== id);
+        LS.set("fm_savings", updated);
+      }
+      setEntries(p => p.filter(e => e.id !== id));
+    } catch(e) { console.error(e); }
+  };
+
+  // Calculations
+  const totalIn  = entries.filter(e => e.type === "in").reduce((s,e) => s+parseFloat(e.amount||0), 0);
+  const totalOut = entries.filter(e => e.type === "out").reduce((s,e) => s+parseFloat(e.amount||0), 0);
+  const balance  = totalIn - totalOut;
+  // Weekly average saved (only "in" entries)
+  const weeklyAvg = entries.filter(e => e.type === "in").length > 0
+    ? totalIn / Math.max(1, Math.ceil(entries.filter(e=>e.type==="in").length / 1))
+    : 0;
+  // Simple weekly rate based on last entries
+  const inEntries = entries.filter(e => e.type === "in");
+  const weeklyRate = inEntries.length > 0 ? totalIn / Math.max(1, inEntries.length) : 0;
+  const projected  = balance + (weeklyRate * projection);
+
+  const inp = {
+    width: "100%", background: "#111", border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "8px", color: "#fff", padding: "0.7rem 0.875rem", fontSize: "0.88rem",
+    fontFamily: "'DM Mono',monospace",
+  };
+  const lbl = {
+    color: "rgba(255,255,255,0.25)", fontSize: "0.62rem", letterSpacing: "0.15em",
+    display: "block", marginBottom: "0.3rem", textTransform: "uppercase",
+  };
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" })
+      + " \u00b7 " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+  };
+
+  return (
+    <div style={{ animation: "fadeUp .32s ease both" }}>
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "0.5rem", marginBottom: "1rem" }}>
+        {[
+          { l: "GUARDADO", v: totalIn, c: "#2ED573" },
+          { l: "GASTO", v: totalOut, c: "#FF4757" },
+          { l: "DISPON\u00cdVEL", v: balance, c: balance >= 0 ? "#E8FF47" : "#FF4757" },
+        ].map(s => (
+          <Tilt key={s.l}>
+            <div style={{
+              background: "#0c0c0c", border: "1px solid rgba(255,255,255,0.055)",
+              borderRadius: "12px", padding: "0.875rem", position: "relative", overflow: "hidden",
+            }}>
+              <div style={{ position:"absolute",top:0,left:0,right:0,height:1.5,
+                background:`linear-gradient(90deg,transparent,${s.c}55,transparent)` }}/>
+              <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.55rem",letterSpacing:"0.12em",marginBottom:"0.35rem" }}>{s.l}</div>
+              <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"0.9rem",color:s.c }}>{fmt(s.v)}</div>
+            </div>
+          </Tilt>
+        ))}
+      </div>
+
+      {/* Projection card */}
+      <div style={{
+        background: "#0c0c0c", border: "1px solid rgba(232,255,71,0.12)",
+        borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "1rem",
+        position: "relative", overflow: "hidden",
+      }}>
+        <div style={{ position:"absolute",top:0,left:0,right:0,height:1.5,
+          background:"linear-gradient(90deg,transparent,rgba(232,255,71,0.4),transparent)" }}/>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
+          <div style={{ color:"rgba(255,255,255,0.25)",fontSize:"0.6rem",letterSpacing:"0.15em" }}>PROJE\u00c7\u00c3O</div>
+          <div style={{ display:"flex", alignItems:"center", gap:"0.4rem" }}>
+            {[2,4,8,12,26].map(w => (
+              <button key={w} onClick={()=>setProjection(w)} style={{
+                padding:"0.2rem 0.5rem", border:"1px solid",
+                borderRadius:"5px", cursor:"pointer", fontSize:"0.58rem",
+                fontFamily:"'DM Mono',monospace", fontWeight:600,
+                background: projection===w ? "#E8FF47" : "transparent",
+                borderColor: projection===w ? "#E8FF47" : "rgba(255,255,255,0.12)",
+                color: projection===w ? "#080808" : "rgba(255,255,255,0.3)",
+              }}>{w}W</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"1rem" }}>
+          <div>
+            <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.12em",marginBottom:"0.25rem" }}>
+              M\u00c9DIA/SEMANA
+            </div>
+            <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:500,fontSize:"1rem",color:"#2ED573" }}>
+              {fmt(weeklyRate)}
+            </div>
+          </div>
+          <div>
+            <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.58rem",letterSpacing:"0.12em",marginBottom:"0.25rem" }}>
+              EM {projection} SEMANAS
+            </div>
+            <div style={{ fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"1rem",color:"#E8FF47" }}>
+              {fmt(projected)}
+            </div>
+          </div>
+        </div>
+        {/* Progress bar */}
+        <div style={{ marginTop:"0.875rem", height:3, background:"rgba(255,255,255,0.05)", borderRadius:2, overflow:"hidden" }}>
+          <div style={{
+            height:"100%", borderRadius:2,
+            background:"linear-gradient(90deg,#2ED573,#E8FF47)",
+            width:`${Math.min((balance/Math.max(projected,1))*100,100)}%`,
+            transition:"width .7s cubic-bezier(.34,1.56,.64,1)",
+            boxShadow:"0 0 6px rgba(232,255,71,.5)",
+          }}/>
+        </div>
+      </div>
+
+      {/* Header + add button */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem" }}>
+        <div style={{ color:"rgba(255,255,255,0.18)",fontSize:"0.6rem",letterSpacing:"0.15em",fontFamily:"'DM Mono',monospace" }}>
+          {entries.length} ENTRADAS
+        </div>
+        <div style={{ display:"flex", gap:"0.4rem" }}>
+          <button onClick={()=>{setAddType("out");setShowAdd(true);}} style={{
+            background:"rgba(255,71,87,0.08)",border:"1px solid rgba(255,71,87,0.25)",
+            borderRadius:"7px",color:"#FF4757",padding:"0.4rem 0.75rem",
+            cursor:"pointer",fontWeight:700,fontSize:"0.68rem",letterSpacing:"0.1em",
+          }}>- GASTAR</button>
+          <button onClick={()=>{setAddType("in");setShowAdd(true);}} style={{
+            background:"rgba(46,213,115,0.1)",border:"1px solid rgba(46,213,115,0.3)",
+            borderRadius:"7px",color:"#2ED573",padding:"0.4rem 0.75rem",
+            cursor:"pointer",fontWeight:700,fontSize:"0.68rem",letterSpacing:"0.1em",
+          }}>+ GUARDAR</button>
+        </div>
+      </div>
+
+      {/* Entries list */}
+      {loading ? (
+        <div style={{ textAlign:"center", padding:"2rem 0" }}>
+          <div style={{ width:28,height:28,border:"2px solid rgba(232,255,71,0.1)",borderTop:"2px solid #E8FF47",
+            borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto" }}/>
+        </div>
+      ) : entries.length === 0 ? (
+        <div style={{ textAlign:"center",padding:"3rem 0",color:"rgba(255,255,255,0.1)",
+          fontSize:"0.68rem",letterSpacing:"0.15em" }}>
+          NENHUMA ENTRADA AINDA
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:"0.4rem" }}>
+          {entries.map((e, i) => {
+            const isIn = e.type === "in";
+            return (
+              <div key={e.id} style={{
+                background:"#0c0c0c",border:"1px solid rgba(255,255,255,0.055)",
+                borderRadius:"10px",padding:"0.7rem 0.875rem",
+                display:"flex",alignItems:"center",gap:"0.75rem",
+                animation:`fadeUp .28s ease ${i*.03}s both`,
+                position:"relative",overflow:"hidden",
+              }}>
+                <div style={{ position:"absolute",left:0,top:"15%",bottom:"15%",width:2.5,
+                  borderRadius:"0 2px 2px 0",
+                  background:isIn?"#2ED573":"#FF4757" }}/>
+                <div style={{
+                  width:32,height:32,borderRadius:"8px",flexShrink:0,
+                  background:isIn?"rgba(46,213,115,0.08)":"rgba(255,71,87,0.08)",
+                  border:`1px solid ${isIn?"rgba(46,213,115,0.2)":"rgba(255,71,87,0.2)"}`,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:"0.9rem",
+                }}>{isIn ? "\u2191" : "\u2193"}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:500, fontSize:"0.85rem" }}>{e.label}</div>
+                  <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",
+                    fontFamily:"'DM Mono',monospace",marginTop:2 }}>
+                    {fmtDate(e.created_at)}
+                  </div>
+                </div>
+                <div style={{
+                  fontFamily:"'DM Mono',monospace",fontWeight:600,fontSize:"0.9rem",
+                  color:isIn?"#2ED573":"#FF4757",flexShrink:0,
+                }}>{isIn?"+":"-"}{fmt(e.amount)}</div>
+                <button onClick={()=>removeEntry(e.id)} style={{
+                  background:"rgba(255,71,87,.05)",border:"1px solid rgba(255,71,87,.12)",
+                  borderRadius:"6px",color:"rgba(255,71,87,.5)",
+                  width:24,height:24,cursor:"pointer",fontSize:"0.78rem",
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                }}>\u00d7</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Modal */}
+      {showAdd && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:700,
+          display:"flex",alignItems:"center",justifyContent:"center",
+          backdropFilter:"blur(14px)",padding:"1rem" }}>
+          <div style={{ background:"#090909",border:"1px solid rgba(255,255,255,0.09)",
+            borderRadius:"16px",padding:"1.5rem",maxWidth:360,width:"100%",
+            animation:"popIn .22s ease both" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.1rem" }}>
+              <div>
+                <div style={{ fontWeight:600,fontSize:"0.88rem",
+                  color:addType==="in"?"#2ED573":"#FF4757" }}>
+                  {addType==="in"?"\u2191 GUARDAR DINHEIRO":"\u2193 REGISTAR GASTO"}
+                </div>
+                <div style={{ color:"rgba(255,255,255,0.2)",fontSize:"0.62rem",marginTop:2,letterSpacing:"0.1em" }}>
+                  {addType==="in"?"Adiciona ao teu guardado":"Retira do teu guardado"}
+                </div>
+              </div>
+              <button onClick={()=>setShowAdd(false)} style={{ background:"none",border:"none",
+                color:"rgba(255,255,255,0.28)",cursor:"pointer",fontSize:18,padding:0 }}>\u00d7</button>
+            </div>
+            {/* Toggle in/out */}
+            <div style={{ display:"flex",gap:"0.4rem",marginBottom:"1rem" }}>
+              {[{k:"in",l:"+ GUARDAR",c:"#2ED573"},{k:"out",l:"- GASTAR",c:"#FF4757"}].map(t=>(
+                <button key={t.k} onClick={()=>setAddType(t.k)} style={{
+                  flex:1,padding:"0.5rem",border:"1px solid",borderRadius:"8px",cursor:"pointer",
+                  fontSize:"0.7rem",fontWeight:700,letterSpacing:"0.08em",
+                  background:addType===t.k?`rgba(${t.k==="in"?"46,213,115":"255,71,87"},0.12)`:"transparent",
+                  borderColor:addType===t.k?t.c:"rgba(255,255,255,0.1)",
+                  color:addType===t.k?t.c:"rgba(255,255,255,0.3)",
+                }}>{t.l}</button>
+              ))}
+            </div>
+            <div style={{ marginBottom:"0.75rem" }}>
+              <label style={lbl}>DESCRI\u00c7\u00c3O</label>
+              <input type="text" placeholder={addType==="in"?"Ex: Poupan\u00e7a semanal...":"Ex: Bilhetes de avi\u00e3o..."}
+                value={newEntry.label}
+                onChange={e=>setNewEntry(p=>({...p,label:e.target.value}))}
+                onKeyDown={e=>e.key==="Enter"&&addEntry()} style={inp}/>
+            </div>
+            <div style={{ marginBottom:"1rem" }}>
+              <label style={lbl}>VALOR {GBP}</label>
+              <input type="number" placeholder="0.00"
+                value={newEntry.amount}
+                onChange={e=>setNewEntry(p=>({...p,amount:e.target.value}))}
+                onKeyDown={e=>e.key==="Enter"&&addEntry()} style={inp}/>
+            </div>
+            <div style={{ display:"flex",gap:"0.45rem" }}>
+              <button onClick={()=>setShowAdd(false)} style={{
+                flex:1,padding:"0.65rem",background:"rgba(255,255,255,0.04)",
+                border:"1px solid rgba(255,255,255,0.07)",borderRadius:"8px",
+                color:"rgba(255,255,255,0.35)",cursor:"pointer",fontSize:"0.72rem",letterSpacing:"0.1em",
+              }}>CANCELAR</button>
+              <button onClick={addEntry} disabled={saving} style={{
+                flex:1,padding:"0.65rem",
+                background:addType==="in"?"#2ED573":"#FF4757",
+                border:"none",borderRadius:"8px",
+                color:addType==="in"?"#080808":"#fff",
+                cursor:"pointer",fontWeight:700,fontSize:"0.72rem",letterSpacing:"0.1em",
+                opacity:saving?0.6:1,
+              }}>{saving?"A GUARDAR...":addType==="in"?"GUARDAR":"REGISTAR"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 //  LOGIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1509,6 +1834,7 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
     {k:"subs",    l:"\u25a3  DIRECT DEBITS"},
     {k:"weekly",  l:"\u25eb  WEEKLY"},
     {k:"expenses",l:"\u25c8  EXPENSES"},
+    {k:"savings", l:"\u25c6  SAVINGS"},
     {k:"overview",l:"\u25c9  OVERVIEW"},
   ];
 
@@ -1904,6 +2230,11 @@ function FinanceApp({ user, onSignOut, joinedCouple }) {
         {/* ── WEEKLY ──────────────────────────────────────────────────────── */}
         {tab==="weekly"&&(
           <WeeklyTab subs={subs} expenses={expenses} income={totalIncome} user={user}/>
+        )}
+
+        {/* ── SAVINGS ─────────────────────────────────────────────────────── */}
+        {tab==="savings"&&(
+          <SavingsTab user={user} couple={couple}/>
         )}
 
         {/* ── EXPENSES ────────────────────────────────────────────────────── */}
